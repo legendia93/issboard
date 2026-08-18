@@ -1,0 +1,15 @@
+# INI yang di-enable, bukan issboard.service.
+#   sudo systemctl enable --now issboard.socket
+# Persis pola cockpit.socket: systemd yang memegang port, prosesnya baru
+# dinyalakan saat ada koneksi pertama dan keluar sendiri setelah idle.
+[Unit]
+Description=Socket issboard (dashboard kesehatan host)
+
+[Socket]
+# Bind ke loopback saja. Akses dari luar lewat reverse proxy / SSH tunnel —
+# jangan pernah menaruh dashboard ini langsung di LAN atau tailnet.
+ListenStream=127.0.0.1:9955
+Accept=no
+
+[Install]
+WantedBy=sockets.target

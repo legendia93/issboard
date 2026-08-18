@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>issboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>issboard</h1>
+  <span id="meta" class="muted">memuat…</span>
+</header>
+
+<main>
+  <section id="alerts" hidden>
+    <h2>Perlu perhatian</h2>
+    <ul id="alert-list"></ul>
+  </section>
+
+  <section>
+    <h2>Host</h2>
+    <div id="host" class="grid"></div>
+  </section>
+
+  <section>
+    <h2>Pool ZFS</h2>
+    <div id="pools" class="grid"></div>
+  </section>
+
+  <section>
+    <h2>Disk (SMART)</h2>
+    <p id="smart-note" class="muted"></p>
+    <div class="scroll"><table id="smart"></table></div>
+  </section>
+
+  <section>
+    <h2>Container</h2>
+    <div class="scroll"><table id="containers"></table></div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

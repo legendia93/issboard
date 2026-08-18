@@ -1,0 +1,21 @@
+# Contoh konfigurasi issboard. Salin ke /etc/issboard.yaml.
+#
+# File ini SENGAJA generik — repo ini publik. Jangan pernah menaruh hostname,
+# alamat IP, atau nama pool milik mesin nyata di sini.
+
+# Hanya dipakai kalau dijalankan TANPA socket activation (mis. saat mengembangkan).
+# Di produksi alamatnya ditentukan issboard.socket.
+listen: 127.0.0.1:9955
+
+# Proses keluar sendiri setelah sekian lama tanpa request; systemd
+# menyalakannya lagi lewat socket. 0 = jangan pernah keluar.
+idle_timeout: 5m
+
+# Ditulis oleh issboard-smart.timer sebagai root. issboard hanya membacanya.
+smart_cache: /var/cache/issboard/smart.json
+
+# Dibaca read-only untuk daftar container.
+docker_socket: /var/run/docker.sock
+
+# Kosongkan untuk mendeteksi semua pool otomatis, atau daftar dipisah koma.
+# pools: pool-satu, pool-dua

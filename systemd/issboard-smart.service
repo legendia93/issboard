@@ -1,0 +1,14 @@
+# Menulis cache SMART sebagai root, terpisah dari issboard.
+#
+# Alasannya dua dan kebetulan sama solusinya:
+#  1. smartctl butuh root, sedangkan issboard sengaja bukan root.
+#  2. smartctl MEMBANGUNKAN HDD yang sedang tidur. Kalau issboard
+#     memanggilnya di jalur request, satu kali buka halaman dari HP =
+#     empat HDD bangun. Lihat plan bagian 5.
+[Unit]
+Description=Kumpulkan SMART ke cache JSON untuk issboard
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/issboard-smart-collect
+# -n standby dipakai di dalam skrip supaya disk yang tidur tetap dibiarkan tidur.

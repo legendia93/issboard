@@ -1,0 +1,53 @@
+#!/bin/bash
+# Menulis /var/cache/issboard/smart.json untuk dibaca issboard.
+#
+# Dijalankan sebagai root oleh issboard-smart.timer, TIDAK PERNAH oleh
+# issboard sendiri: smartctl membangunkan HDD yang sedang standby.
+set -euo pipefail
+
+OUT=${1:-/var/cache/issboard/smart.json}
+TMP=$(mktemp "${OUT}.XXXXXX")
+trap 'rm -f "$TMP"' EXIT
+
+install -d -m 0755 "$(dirname "$OUT")"
+
+{
+  printf '{\n  "written_at": "%s",\n  "disks": [\n' "$(date -Iseconds)"
+  first=1
+  while read -r dev; do
+    [ -n "$dev" ] || continue
+    # -n standby: disk yang tidur DIBIARKAN tidur. Tanpa ini timer 6-jaman
+    # ini sendiri yang akan menahan disk tetap berputar.
+    json=$(smartctl -x -j -n standby "$dev" 2>/dev/null || true)
+    [ -n "$json" ] || continue
+    [ $first -eq 1 ] || printf ',\n'
+    first=0
+    printf '%s' "$json" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+# exit_status bit 1 = perangkat dalam standby; jangan dibangunkan.
+standby = d.get("smartctl", {}).get("exit_status", 0) & 2 != 0
+attrs = {a["name"]: a["raw"]["value"]
+         for a in d.get("ata_smart_attributes", {}).get("table", [])}
+tests = d.get("ata_smart_self_test_log", {}).get("standard", {}).get("table", [])
+print(json.dumps({
+    "device": d.get("device", {}).get("name", ""),
+    "model": d.get("model_name", ""),
+    "serial": d.get("serial_number", ""),
+    "passed": d.get("smart_status", {}).get("passed", False),
+    "temperature_c": d.get("temperature", {}).get("current", 0),
+    "power_on_hours": d.get("power_on_time", {}).get("hours", 0),
+    "reallocated_sectors": attrs.get("Reallocated_Sector_Ct", 0),
+    "pending_sectors": attrs.get("Current_Pending_Sector", 0),
+    "last_self_test": (tests[0].get("status", {}).get("string", "") if tests else ""),
+    "standby": standby,
+}, indent=4))
+'
+  done < <(smartctl --scan | awk '{print $1}')
+  printf '\n  ]\n}\n'
+} > "$TMP"
+
+# Tulis atomik: issboard tidak boleh pernah membaca file separuh jadi.
+chmod 0644 "$TMP"
+mv -f "$TMP" "$OUT"
+trap - EXIT

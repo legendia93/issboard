@@ -1,0 +1,11 @@
+[Unit]
+Description=Perbarui cache SMART issboard tiap 6 jam
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+# Kalau mesin mati saat jadwalnya lewat, jalankan setelah nyala.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

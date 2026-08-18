@@ -1,0 +1,15 @@
+# binary hasil build
+/issboard
+/dist/
+
+# konfigurasi nyata — HANYA contoh yang boleh masuk repo
+issboard.yaml
+*.local.yaml
+
+# jangan pernah
+*.env
+.env*
+*secret*
+*token*
+*.key
+*.pem
