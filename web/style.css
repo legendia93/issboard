@@ -1,42 +1,198 @@
-:root {
-  --bg: #ffffff; --fg: #16181d; --muted: #5d6470;
-  --line: #e3e6ea; --card: #f7f8fa;
-  --ok: #1a7f4b; --warn: #9a6700; --bad: #b3261e;
+/* ============================================================
+   style.css — tata letak halaman. Token & komponen ada di nothing.css.
+
+   Dirancang HP lebih dulu: host ini paling sering dilihat dari layar
+   kecil lewat remote, jadi satu kolom adalah keadaan normal, bukan
+   kasus tepi yang ditambal media query di ujung berkas.
+   ============================================================ */
+
+.page {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14161a; --fg: #e6e8ec; --muted: #99a0ac;
-    --line: #2a2e36; --card: #1b1e24;
-    --ok: #4ac97e; --warn: #e3b341; --bad: #ff6b5e;
+
+/* ---------- Header ---------- */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.top-id, .top-act { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.brand {
+  font-family: var(--font-dot);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.section {
+  margin: 30px 0 12px;
+  display: block;
+}
+
+.note {
+  font-size: 12px;
+  color: var(--n-ink-soft);
+  margin: 0 0 12px;
+}
+
+.foot {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--n-line);
+  display: block;
+  line-height: 1.7;
+}
+
+/* ---------- Kartu hero ---------- */
+.hero { padding: 22px 24px 20px; }
+
+.verdict {
+  font-size: clamp(30px, 8vw, 52px);
+  margin: 10px 0 0;
+  line-height: 1;
+}
+/* Vonis tetap memakai warna kartu saat sehat. Warna pekat hanya muncul
+   kalau memang ada yang perlu diurus — itu seluruh gunanya. */
+.verdict.warn { color: var(--st-warn); }
+.verdict.crit { color: var(--n-accent); }
+
+.findings { list-style: none; margin: 18px 0 0; padding: 0; }
+.findings li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 0;
+  border-top: 1px solid rgba(128,128,128,.28);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.findings .n-dot { margin-top: 6px; }
+.findings b { font-weight: 600; }
+.findings span { opacity: .72; }
+.findings .more { opacity: .6; font-size: 12px; border-top-style: dashed; }
+
+/* ---------- Bento ---------- */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+/* Daftar panjang (container, dataset) butuh lebar, bukan kolom sempit. */
+.bento-wide { grid-template-columns: 1fr; }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.card-title {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 600; font-size: 14px;
+  min-width: 0;
+}
+.card-title .name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Angka telemetri: mono, bukan dot-matrix — lihat aturan tipografi di
+   nothing.css. Font dot dipakai untuk kata (wordmark, vonis), bukan angka. */
+.stat {
+  font-family: var(--font-mono);
+  letter-spacing: -0.02em;
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.stat .unit {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--n-ink-soft);
+  margin-left: 4px;
+}
+.sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--n-ink-soft);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* ---------- Bar kapasitas ----------
+   Bidangnya pastel karena sehat harus tenang. Yang bermasalah diganti
+   warna pekat oleh kelas .warn/.crit, dan itulah satu-satunya hal yang
+   menarik mata di layar yang selebihnya kalem. */
+.bar {
+  position: relative;
+  height: 10px;
+  margin-top: 12px;
+  border-radius: var(--n-radius-pill);
+  background: var(--n-surface-2);
+  border: 1px solid var(--n-line);
+  overflow: hidden;
+}
+.bar > i {
+  display: block;
+  height: 100%;
+  background: var(--fill, var(--p-mint-fill));
+  border-right: 1px solid var(--line, var(--p-mint-line));
+}
+.bar.warn > i { background: var(--st-warn-fill); border-right-color: var(--st-warn); }
+.bar.crit > i { background: var(--st-crit-fill); border-right-color: var(--n-accent); }
+
+/* ---------- Ruang sparkline (fase 3) ----------
+   Tingginya dikunci sejak sekarang supaya grafik nanti mengisi tanpa
+   menggeser satu pun kartu. Baseline titik-titik menandai bahwa ruang
+   ini memang disediakan, bukan celah kosong yang tidak disengaja. */
+.spark {
+  height: 34px;
+  margin-top: 12px;
+  border-radius: 8px;
+  background-image: radial-gradient(var(--n-line) 1px, transparent 1px);
+  background-size: 8px 8px;
+  background-position: bottom left;
+  background-repeat: repeat-x;
+  opacity: .8;
+}
+
+/* ---------- Baris daftar (container, dataset) ---------- */
+.rows { display: flex; flex-direction: column; }
+.row {
+  display: grid;
+  grid-template-columns: 14px minmax(0,1.1fr) minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 0;
+  border-top: 1px solid var(--n-line);
+  font-size: 13px;
+  min-width: 0;
+}
+.row:first-child { border-top: 0; }
+.row .rname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .rmeta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--n-ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row .rtail { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+
+/* Di layar sempit, metadata pindah ke baris kedua daripada terpotong. */
+@media (max-width: 560px) {
+  .row {
+    grid-template-columns: 14px minmax(0,1fr) auto;
   }
+  .row .rmeta { grid-column: 2 / -1; }
 }
-* { box-sizing: border-box; }
-body {
-  margin: 0; padding: 0 1rem 3rem;
-  background: var(--bg); color: var(--fg);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-header {
-  display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap;
-  padding: 1rem 0; border-bottom: 1px solid var(--line); margin-bottom: 1rem;
-}
-h1 { font-size: 1.1rem; margin: 0; letter-spacing: .02em; }
-h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em;
-     color: var(--muted); margin: 1.75rem 0 .6rem; }
-.muted { color: var(--muted); font-size: .85rem; }
-.grid { display: grid; gap: .6rem;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-.card { background: var(--card); border: 1px solid var(--line);
-        border-radius: 8px; padding: .7rem .8rem; }
-.card .k { font-size: .75rem; color: var(--muted); }
-.card .v { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
-.scroll { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: .88rem; }
-th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid var(--line);
-         white-space: nowrap; }
-th { color: var(--muted); font-weight: 600; font-size: .75rem;
-     text-transform: uppercase; letter-spacing: .05em; }
-.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
-#alerts { border: 1px solid var(--bad); border-radius: 8px; padding: .6rem .9rem; }
-#alerts h2 { color: var(--bad); margin-top: .3rem; }
-#alert-list { margin: 0 0 .4rem; padding-left: 1.1rem; }

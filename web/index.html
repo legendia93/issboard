@@ -3,42 +3,59 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>issboard</title>
+<link rel="stylesheet" href="nothing.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-  <h1>issboard</h1>
-  <span id="meta" class="muted">memuat…</span>
-</header>
+<div class="n-appbg"></div>
 
-<main>
-  <section id="alerts" hidden>
-    <h2>Perlu perhatian</h2>
-    <ul id="alert-list"></ul>
+<div class="page">
+
+  <header class="top">
+    <div class="top-id">
+      <h1 class="brand">issboard</h1>
+      <span id="host-pill" class="n-pill" hidden></span>
+      <span id="demo-pill" class="n-pill n-pill-warn" hidden>data palsu</span>
+    </div>
+    <div class="top-act">
+      <span id="updated" class="n-label">memuat…</span>
+      <button id="theme" class="n-btn" type="button" title="ganti tema">tema</button>
+    </div>
+  </header>
+
+  <!-- Kartu hero: satu jawaban untuk pertanyaan yang sebenarnya dicari
+       saat halaman ini dibuka sambil lewat — ada yang perlu diurus atau tidak. -->
+  <section id="hero" class="n-card n-card-black hero n-fade-in">
+    <span class="n-label">status host</span>
+    <p id="verdict" class="n-num verdict">MEMUAT</p>
+    <ul id="findings" class="findings"></ul>
   </section>
 
-  <section>
-    <h2>Host</h2>
-    <div id="host" class="grid"></div>
-  </section>
+  <h2 class="n-label section">host</h2>
+  <div id="host" class="bento"></div>
 
-  <section>
-    <h2>Pool ZFS</h2>
-    <div id="pools" class="grid"></div>
-  </section>
+  <h2 class="n-label section">pool zfs</h2>
+  <div id="pools" class="bento"></div>
 
-  <section>
-    <h2>Disk (SMART)</h2>
-    <p id="smart-note" class="muted"></p>
-    <div class="scroll"><table id="smart"></table></div>
-  </section>
+  <h2 class="n-label section">disk — smart</h2>
+  <p id="smart-note" class="note"></p>
+  <div id="disks" class="bento"></div>
 
-  <section>
-    <h2>Container</h2>
-    <div class="scroll"><table id="containers"></table></div>
-  </section>
-</main>
+  <h2 class="n-label section">container</h2>
+  <div id="containers" class="bento bento-wide"></div>
+
+  <h2 class="n-label section">dataset</h2>
+  <div id="datasets" class="bento bento-wide"></div>
+
+  <p id="errors" class="note" hidden></p>
+
+  <footer class="foot n-label">
+    issboard — dashboard kesehatan host. Data dikumpulkan hanya selama halaman ini terbuka.
+  </footer>
+
+</div>
 
 <script src="app.js"></script>
 </body>

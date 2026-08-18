@@ -8,8 +8,14 @@ Yang ditampilkan: pool & dataset ZFS (termasuk **apakah pool pernah di-scrub**
 dan **apakah benar-benar redundan**), ringkasan SMART tiap disk, daftar
 container beserta port yang ter-*publish*, dan beban host + ARC.
 
+Di atas semuanya ada **satu vonis**: sehat, atau sekian hal yang perlu diurus —
+supaya pertanyaan yang sebenarnya dicari terjawab tanpa membaca satu kartu pun.
+
 > **Status: v1 awal.** Berjalan dan menyajikan data nyata, tapi belum dipakai
 > lama di produksi. Belum ada test otomatis.
+>
+> Rencana yang sedang berjalan ada di [`docs/plan/`](docs/plan/00-index.md);
+> alasan di balik bentuknya ada di [`docs/design.md`](docs/design.md).
 
 ## Kenapa begini
 
@@ -35,6 +41,44 @@ tiap 6 jam (dengan `-n standby`) ke sebuah file JSON, dan issboard hanya
 membaca file itu. Cache yang basi ditandai di UI — timer yang mati adalah
 temuan tersendiri.
 
+## Mencoba tanpa memasang apa pun
+
+```bash
+go build -o issboard .
+./issboard -demo -config /dev/null
+# lalu buka http://127.0.0.1:9955
+```
+
+Mode demo menyajikan data palsu dan **tidak menyentuh sistem sama sekali** —
+tidak memanggil `zpool`, tidak membuka socket container, tidak membaca cache
+SMART. Datanya sengaja memuat kondisi sakit (pool stripe, disk dengan
+reallocated sector, container `Up` tanpa network, port database ter-*publish*
+ke `0.0.0.0`) supaya tampilan peringatannya bisa dilihat tanpa menunggu hal itu
+terjadi sungguhan.
+
+Mode ini juga cara yang benar untuk **screenshot atau merekam layar**: halaman
+sebenarnya menampilkan hostname, alamat IP, nama pool, dan nama app.
+
+## Tampilan
+
+Tema **Nothing OS**: off-white atau hitam pekat, garis 1px, tanpa gradient,
+tanpa glow. Mengikuti tema sistem, dan bisa ditimpa lewat tombol **TEMA**.
+
+Aturan warnanya satu kalimat: **sehat itu pastel, bermasalah itu pekat.**
+Pastel dipakai sebagai *identitas* — pool ini yang mana — bukan sebagai status.
+Warna pekat (amber, merah) hanya muncul kalau memang ada yang perlu diurus,
+jadi layar yang sehat sepenuhnya tenang dan satu warna pekat langsung menarik
+mata. Karena itu palet pastelnya tidak memuat kuning, oranye, atau merah sama
+sekali.
+
+Angka telemetri selalu memakai font mono, tidak pernah font dot-matrix: pada
+font dot yang dipakai, `52` terbaca `92` dan `35` terbaca `39`. Font dot-matrix
+hanya untuk kata.
+
+Dirancang untuk layar HP lebih dulu — itu cara host ini paling sering dilihat.
+Tidak ada aset dari luar: font ikut ter-*embed*, dan halaman disajikan dengan
+`Content-Security-Policy: default-src 'self'`.
+
 ## Membangun
 
 ```bash
@@ -49,7 +93,12 @@ Menjalankan untuk mengembangkan (tanpa systemd, memakai `listen:` dari config):
 ```
 
 Di mesin tanpa ZFS/Docker, issboard tetap jalan dan melaporkan bagian yang
-gagal di field `errors` — bukan mati.
+gagal di field `errors` — bukan mati. Itu bukan kasus tepi, itu cara
+mengembangkannya.
+
+**Podman** dipakai dengan mengarahkan `docker_socket` ke
+`/run/podman/podman.sock`; API-nya kompatibel. ⚠️ **Belum diuji** — belum ada
+mesin untuk memverifikasinya. Laporan dari yang sempat mencoba sangat dihargai.
 
 ## Memasang
 
@@ -90,9 +139,15 @@ Sunting `/etc/issboard.yaml` seperlunya, lalu buka `http://127.0.0.1:9955`.
 | Endpoint | Isi |
 |---|---|
 | `GET /api/v1/health` | liveness, tanpa mengumpulkan apa pun |
-| `GET /api/v1/status` | seluruh snapshot: host, pools, datasets, containers, smart |
+| `GET /api/v1/status` | seluruh snapshot: host, pools, datasets, containers, smart, plus `verdict` & `findings[]` |
 
-Kegagalan per-bagian muncul di `errors[]`, bukan menggagalkan seluruh respons.
+Kegagalan per-bagian muncul di `errors[]`, bukan menggagalkan seluruh respons —
+dan tetap dilaporkan selama datanya masih dilayani dari cache, bukan cuma di
+permintaan yang kebetulan mengambil ulang.
+
+`findings[]` dihitung di server, bukan di JavaScript, supaya pengirim
+notifikasi nanti memakai aturan yang persis sama. Tiap temuan punya `key` yang
+stabil untuk de-duplikasi alert.
 
 ## Lisensi
 

@@ -15,7 +15,14 @@ idle_timeout: 5m
 smart_cache: /var/cache/issboard/smart.json
 
 # Dibaca read-only untuk daftar container.
+# Podman: /run/podman/podman.sock — API-nya kompatibel, tapi BELUM DIUJI.
 docker_socket: /var/run/docker.sock
+
+# Data palsu, sistem tidak disentuh sama sekali. Berguna untuk mencoba
+# tampilan, dan untuk screenshot/rekaman layar yang aman dibagikan —
+# halaman sebenarnya menampilkan hostname, alamat IP, dan nama pool.
+# Bisa juga lewat flag: ./issboard -demo
+# demo: true
 
 # Kosongkan untuk mendeteksi semua pool otomatis, atau daftar dipisah koma.
 # pools: pool-satu, pool-dua

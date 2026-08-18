@@ -1,6 +1,6 @@
 // Package collector mengumpulkan data kesehatan host.
 //
-// Aturan keras dari plan bagian 5: TIDAK ADA collector yang boleh memanggil
+// Aturan keras dari docs/design.md §3.3: TIDAK ADA collector yang boleh memanggil
 // smartctl di jalur request. SMART hanya dibaca dari cache JSON yang ditulis
 // unit systemd milik root, karena smartctl membangunkan HDD yang sedang tidur.
 package collector
@@ -37,14 +37,22 @@ type Cache struct {
 
 type cached[T any] struct {
 	val T
+	// err disimpan bersama nilainya, bukan cuma dilaporkan sekali saat
+	// pengambilan gagal. Tanpa ini, error hanya muncul di satu permintaan
+	// lalu hilang selama TTL — dan karena halaman polling tiap 15 detik,
+	// host tanpa ZFS akan hampir selalu terlihat baik-baik saja. Layar yang
+	// tampak sehat karena buta lebih berbahaya daripada layar yang mengaku
+	// tidak tahu, jadi errornya ikut sesegar-basi nilainya.
+	err error
 	at  time.Time
 	ttl time.Duration
 }
 
 func (c *cached[T]) fresh() bool { return !c.at.IsZero() && time.Since(c.at) < c.ttl }
 
-func (c *cached[T]) set(v T) {
+func (c *cached[T]) set(v T, err error) {
 	c.val = v
+	c.err = err
 	c.at = time.Now()
 }
 
@@ -79,39 +87,34 @@ func (c *Cache) Collect(ctx context.Context, o Options) Snapshot {
 	}
 
 	if !c.host.fresh() {
-		h, err := CollectHost(ctx)
-		note(err)
-		c.host.set(h)
+		c.host.set(CollectHost(ctx))
 	}
 	s.Host = c.host.val
+	note(c.host.err)
 
 	if !c.pools.fresh() {
-		p, err := CollectPools(ctx, o.Pools)
-		note(err)
-		c.pools.set(p)
+		c.pools.set(CollectPools(ctx, o.Pools))
 	}
 	s.Pools = c.pools.val
+	note(c.pools.err)
 
 	if !c.datasets.fresh() {
-		d, err := CollectDatasets(ctx)
-		note(err)
-		c.datasets.set(d)
+		c.datasets.set(CollectDatasets(ctx))
 	}
 	s.Datasets = c.datasets.val
+	note(c.datasets.err)
 
 	if !c.containers.fresh() {
-		ct, err := CollectContainers(ctx, o.DockerSocket)
-		note(err)
-		c.containers.set(ct)
+		c.containers.set(CollectContainers(ctx, o.DockerSocket))
 	}
 	s.Containers = c.containers.val
+	note(c.containers.err)
 
 	if !c.smart.fresh() {
-		sm, err := ReadSmartCache(o.SmartCache)
-		note(err)
-		c.smart.set(sm)
+		c.smart.set(ReadSmartCache(o.SmartCache))
 	}
 	s.Smart = c.smart.val
+	note(c.smart.err)
 
 	s.Errors = errs
 	return s

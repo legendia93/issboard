@@ -1,6 +1,6 @@
 // Package api melayani JSON read-only untuk v1.
 //
-// Router sengaja tidak dikunci ke GET saja: plan bagian 6 meminta bentuknya
+// Router sengaja tidak dikunci ke GET saja: docs/design.md §6 meminta bentuknya
 // siap untuk endpoint bermutasi menyusul, tanpa harus dibongkar.
 package api
 
@@ -11,6 +11,7 @@ import (
 
 	"github.com/legendia93/issboard/internal/collector"
 	"github.com/legendia93/issboard/internal/config"
+	"github.com/legendia93/issboard/internal/health"
 )
 
 type Server struct {
@@ -50,13 +51,38 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "time": time.Now()})
 }
 
+// statusResponse menyematkan Snapshot apa adanya lalu menambahkan vonis.
+//
+// Vonisnya dihitung di sini, bukan di JavaScript, supaya issboard-agent
+// (fase 2) memakai aturan yang persis sama untuk mengirim notifikasi. Aturan
+// yang disalin ke dua bahasa akan berbeda pelan-pelan, dan yang gagal duluan
+// justru jalur alert — satu-satunya yang bekerja saat halaman tidak dibuka.
+type statusResponse struct {
+	collector.Snapshot
+	Verdict  health.Verdict   `json:"verdict"`
+	Findings []health.Finding `json:"findings"`
+	Demo     bool             `json:"demo,omitempty"`
+}
+
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	snap := s.cache.Collect(r.Context(), collector.Options{
-		SmartCache:   s.cfg.SmartCache,
-		DockerSocket: s.cfg.DockerSocket,
-		Pools:        s.cfg.Pools,
+	var snap collector.Snapshot
+	if s.cfg.Demo {
+		snap = collector.DemoSnapshot()
+	} else {
+		snap = s.cache.Collect(r.Context(), collector.Options{
+			SmartCache:   s.cfg.SmartCache,
+			DockerSocket: s.cfg.DockerSocket,
+			Pools:        s.cfg.Pools,
+		})
+	}
+
+	fs := health.Evaluate(snap)
+	writeJSON(w, http.StatusOK, statusResponse{
+		Snapshot: snap,
+		Verdict:  health.Summarize(fs),
+		Findings: fs,
+		Demo:     s.cfg.Demo,
 	})
-	writeJSON(w, http.StatusOK, snap)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

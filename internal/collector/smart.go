@@ -36,7 +36,7 @@ type SmartReport struct {
 //
 // 🔴 issboard TIDAK PERNAH memanggil smartctl sendiri. Satu panggilan
 // membangunkan HDD yang sedang standby; dengan socket activation, satu kali
-// buka halaman dari HP akan membangunkan seluruh disk. Lihat plan bagian 5.
+// buka halaman dari HP akan membangunkan seluruh disk. Lihat design.md §3.3.
 func ReadSmartCache(path string) (SmartReport, error) {
 	var r SmartReport
 	b, err := os.ReadFile(path)

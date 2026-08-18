@@ -121,6 +121,7 @@ internal/collector/
   smart.go              BACA cache JSON — tidak pernah memanggil smartctl
   docker.go             socket Docker lewat unix transport
   host.go               /proc + /proc/spl/kstat/zfs/arcstats
+internal/health/        aturan vonis — dipakai ulang pengirim notifikasi
 internal/api/           GET /api/v1/*
 web/                    vanilla, ter-embed, tanpa build step
 systemd/                socket + service + timer SMART
@@ -132,6 +133,12 @@ yang gagal menaruh pesannya di `errors[]`, dan sisanya tetap disajikan. Di
 mesin tanpa ZFS atau tanpa Docker, issboard tetap jalan dan berguna — itu
 bukan kasus tepi, itu cara mengembangkannya.
 
+Error disimpan **bersama nilai yang di-cache**, bukan dilaporkan sekali saat
+pengambilan gagal. Kalau tidak, error cuma muncul di satu permintaan lalu
+hilang selama TTL — dan karena halaman polling tiap 15 detik, host tanpa ZFS
+akan hampir selalu terlihat baik-baik saja. Layar yang tampak sehat karena
+buta lebih berbahaya daripada layar yang mengaku tidak tahu.
+
 ## 6. API
 
 Semua JSON. **v1 hanya `GET`**, tapi router sengaja **tidak dikunci** ke GET
@@ -141,9 +148,59 @@ supaya tidak perlu dibongkar.
 | Endpoint | Isi |
 |---|---|
 | `GET /api/v1/health` | liveness, tanpa mengumpulkan apa pun |
-| `GET /api/v1/status` | snapshot penuh: host, pools, datasets, containers, smart |
+| `GET /api/v1/status` | snapshot penuh: host, pools, datasets, containers, smart, `verdict`, `findings[]` |
 
-## 7. Keamanan
+**Vonis dihitung di server, bukan di JavaScript.** Aturannya ada di
+`internal/health` supaya pengirim notifikasi (yang tidak punya browser)
+memakai aturan yang persis sama. Dua salinan aturan di dua bahasa akan
+berbeda pelan-pelan, dan yang gagal duluan justru jalur alert — satu-satunya
+yang bekerja saat halaman dashboard tidak dibuka.
+
+## 7. Tampilan
+
+Temanya **Nothing OS**, di-port dari proyek `lookna`: off-white atau hitam
+pekat, garis 1px, radius squircle, label mono uppercase. Tidak ada gradient
+warna, glow, glass/blur — dan tidak ada animasi yang jalan terus-menerus,
+karena dashboard yang berkedip melelahkan dan membuang daya HP.
+
+**Dirancang untuk layar HP lebih dulu.** Host ini paling sering dilihat lewat
+remote dari HP, jadi satu kolom adalah keadaan normal, bukan kasus tepi yang
+ditambal di ujung berkas CSS.
+
+### 7.1 "Sehat itu pastel, bermasalah itu pekat"
+
+Pastel dipakai sebagai **identitas data** — menandai *pool yang mana*, bukan
+*sehat atau tidak*. Status memakai warna pekat, dan hanya saat ada masalah.
+
+Akibatnya layar yang sehat sepenuhnya tenang, dan satu warna pekat yang muncul
+langsung menarik mata. Itu memang seluruh tugas dashboard ini.
+
+Konsekuensi yang mengikat: **palet pastel tidak boleh memuat kuning, oranye,
+atau merah.** Warna itu sudah punya arti. Butter pastel sempat dipakai, dan bar
+memori 67% yang sehat langsung terbaca seperti peringatan.
+
+### 7.2 Angka tidak pernah memakai font dot-matrix
+
+Font dot-matrix adalah tanda tangan Nothing OS, dan menggoda untuk dipakai di
+angka besar. Tapi diuji: pada font itu, **`52` terbaca `92`, `35` terbaca `39`,
+`58` terbaca `98`** — digit 3/5/6/8/9 memakai kisi piksel yang nyaris sama.
+
+Salah membaca suhu disk 52°C sebagai 92°C persis jenis kesalahan yang dashboard
+ini ada untuk mencegahnya. Jadi aturannya: **font dot untuk kata, mono untuk
+angka.**
+
+### 7.3 Mode demo
+
+`-demo` menyajikan data palsu dan tidak menyentuh sistem sama sekali. Dua
+alasan, dan yang kedua yang membuatnya dikerjakan bersamaan dengan UI:
+
+1. Tampilan kondisi sakit mustahil digarap kalau harus menunggu disk benar-benar
+   memburuk. Tanpa ini, aturan di 7.1 tidak bisa dilihat hasilnya.
+2. Halaman ini menampilkan hostname, alamat IP, nama pool, dan nama app. Mode
+   demo membuat screenshot dan rekaman layar aman — persis hal yang `.gitignore`
+   repo ini susah payah jaga.
+
+## 8. Keamanan
 
 **Aturan tetap: batasi akses, bukan kemampuan.** Dashboard yang dilumpuhkan
 sampai tidak berguna akan diganti orang dengan shell — dan shell itu jauh
@@ -174,12 +231,17 @@ belakangan:
    meloloskan hal seperti `pool/app@../..`. Ambil daftar nyata dari sistem,
    cocokkan persis, tolak sisanya.
 
-## 8. Status & yang belum ada
+## 9. Status & yang belum ada
 
-v1 berjalan dan menyajikan data nyata. Yang belum:
+v1 berjalan dan menyajikan data nyata, dengan tampilan Nothing OS dan mode demo.
 
+Rencana yang sedang berjalan — beserta urutannya — ada di
+[`plan/`](plan/00-index.md). Ringkasnya yang belum:
+
+- **Riwayat & notifikasi** lewat unit bertimer terpisah ([`plan/02-agent.md`](plan/02-agent.md))
+- **Sparkline** yang mengisi ruang yang sudah disiapkan di kartu
 - Perbandingan konfigurasi snapshot (mis. `sanoid.conf`) dengan dataset nyata
 - Panel versi app + deteksi drift antara config dan container yang jalan
 - Fase arsip & unduhan backup
 - Test otomatis
-- Autentikasi (lihat bagian 7)
+- Autentikasi (lihat bagian 8)

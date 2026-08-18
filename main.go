@@ -30,11 +30,18 @@ var webFS embed.FS
 
 func main() {
 	cfgPath := flag.String("config", "/etc/issboard.yaml", "berkas konfigurasi")
+	demo := flag.Bool("demo", false, "sajikan data palsu; tidak menyentuh sistem sama sekali")
 	flag.Parse()
 
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		log.Fatalf("config %s: %v", *cfgPath, err)
+	}
+	if *demo {
+		cfg.Demo = true
+	}
+	if cfg.Demo {
+		log.Printf("issboard: MODE DEMO — seluruh data palsu, sistem tidak disentuh")
 	}
 
 	ln, activated, err := listener(cfg.Listen)

@@ -1,0 +1,285 @@
+/* ============================================================
+   nothing.css — lapisan token, tema "Nothing OS".
+   Sumber kebenaran tunggal untuk warna, radius, garis, tipografi.
+   Di-port dari proyek lookna, ditambah lapisan pastel untuk data.
+
+   Anti-pola dilarang: gradient warna, glow, glass/blur, emerald.
+   Tambahan di sini: tidak ada animasi yang jalan terus-menerus —
+   dashboard yang berkedip melelahkan dan membuang daya HP.
+   ============================================================ */
+
+/* ---------- 1. Font dot-matrix (self-host, offline) ---------- */
+@font-face {
+  font-family: 'Ndot';
+  src: url('fonts/ndot.ttf') format('truetype'); /* Pixelify Sans (OFL) */
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- 2. Token netral ---------- */
+:root {                       /* LIGHT — default */
+  --n-bg:         #F4F4F4;    /* off-white kanvas */
+  --n-surface:    #FFFFFF;    /* kartu */
+  --n-surface-2:  #ECECEC;    /* kartu sekunder / hover */
+  --n-ink:        #0A0A0A;    /* teks utama, kartu hitam */
+  --n-ink-soft:   #6B6B6B;    /* teks sekunder */
+  --n-ink-faint:  #696969;    /* metadata paling redup — AA di atas surface-2 */
+  --n-line:       #E2E2E2;    /* garis 1px */
+  --n-line-strong:#0A0A0A;    /* garis penegas */
+  --n-accent:     #D71921;    /* MERAH — hemat! dipakai HANYA untuk kritis */
+  --n-accent-ink: #FFFFFF;
+  --n-on-black:   #F4F4F4;
+
+  --n-radius:     22px;
+  --n-radius-sm:  14px;
+  --n-radius-pill:999px;
+  --n-shadow:     0 1px 2px rgba(0,0,0,.06);
+
+  --font-dot:   'Ndot', ui-monospace, monospace;
+  --font-sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:  ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+}
+
+:root[data-theme="dark"],
+:root:not([data-theme="light"]) {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+}
+
+/* ---------- 3. Token status: "bermasalah itu pekat" ----------
+   Aturan tema ini: yang sehat digambar pastel dan tenang; hanya
+   kondisi bermasalah yang boleh memakai warna pekat, supaya mata
+   langsung tertarik ke satu-satunya hal yang perlu dilihat. */
+:root {
+  --st-ok:    var(--n-ink-soft);
+  --st-warn:  #B26A00;
+  --st-warn-fill: #FBE7C2;
+  --st-crit:  var(--n-accent);
+  --st-crit-fill: #FBD7D8;
+
+  /* Kartu hero adalah kebalikan halaman: hitam saat light, putih saat
+     dark. Nada statusnya ikut berbalik, jadi disimpan terpisah. */
+  --card-black-accent: #FF2A34;
+  --card-black-warn:   #FFB020;
+}
+
+/* ---------- 4. Token pastel: identitas data, BUKAN status ----------
+   Tiap pool/disk memegang satu pastel supaya bisa dikenali lintas
+   kartu (dan, di fase 3, lintas sparkline). Karena pastel di atas
+   putih tidak lolos kontras untuk garis tipis, tiap warna punya dua
+   token: -fill untuk bidang, -line untuk garis dan teks kecil.
+
+   🔴 TIDAK ADA KUNING, ORANYE, ATAU MERAH DI SINI — dan ini bukan
+   soal selera. Warna itu sudah punya arti "perhatian" dan "kritis"
+   di tema ini. Pastel butter sempat dipakai, dan bar memori 67% yang
+   sehat langsung terbaca seperti peringatan. Palet identitas harus
+   memakai rentang warna yang TIDAK pernah dipakai status, kalau
+   tidak aturan "sehat pastel, bermasalah pekat" runtuh sendiri. */
+:root {
+  --p-mint-fill: #A8E6CF;  --p-mint-line: #2E9E7B;
+  --p-sky-fill:  #B3DAF5;  --p-sky-line:  #2B7FB8;
+  --p-lav-fill:  #CFC6F0;  --p-lav-line:  #6B57C4;
+  --p-teal-fill: #B2E4E4;  --p-teal-line: #0B7C7C;
+}
+
+/* ---------- 5. Dark: PURE BLACK, bukan navy ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --n-bg:         #0A0A0A;
+    --n-surface:    #161616;
+    --n-surface-2:  #1E1E1E;
+    --n-ink:        #F4F4F4;
+    --n-ink-soft:   #A8A8A8;
+    --n-ink-faint:  #8A8A8A;   /* #6B6B6B cuma 3.4:1 di #0A0A0A — di bawah AA */
+    --n-line:       #2A2A2A;
+    --n-line-strong:#F4F4F4;
+    --n-accent:     #FF2A34;
+    --n-accent-ink: #0A0A0A;
+    --n-shadow:     0 1px 2px rgba(0,0,0,.5);
+
+    --st-warn:      #FFB020;
+    --st-warn-fill: #4A3410;
+    --st-crit-fill: #4A1518;
+
+    /* pastel di dark: -fill jadi redup (bidang di atas hitam),
+       -line jadi terang (garis & teks kecil) — perannya bertukar. */
+    --p-mint-fill: #2C5B4C;  --p-mint-line: #6FE0B8;
+    --p-sky-fill:  #26485E;  --p-sky-line:  #8FCBFF;
+    --p-lav-fill:  #3E3663;  --p-lav-line:  #C0B4FF;
+    --p-teal-fill: #234E4E;  --p-teal-line: #2DD4D4;
+
+    /* Kartu hero terbalik jadi PUTIH di dark, jadi nada merahnya ikut
+       berbalik: di sini yang kontras justru merah light-mode. */
+    --card-black-accent: #D71921;
+    --card-black-warn:   #B26A00;
+  }
+}
+
+/* Pilihan eksplisit lewat tombol tema menang atas preferensi sistem. */
+:root[data-theme="dark"] {
+  --n-bg:         #0A0A0A;
+  --n-surface:    #161616;
+  --n-surface-2:  #1E1E1E;
+  --n-ink:        #F4F4F4;
+  --n-ink-soft:   #A8A8A8;
+  --n-ink-faint:  #8A8A8A;
+  --n-line:       #2A2A2A;
+  --n-line-strong:#F4F4F4;
+  --n-accent:     #FF2A34;
+  --n-accent-ink: #0A0A0A;
+  --n-shadow:     0 1px 2px rgba(0,0,0,.5);
+
+  --st-warn:      #FFB020;
+  --st-warn-fill: #4A3410;
+  --st-crit-fill: #4A1518;
+
+  --p-mint-fill: #2C5B4C;  --p-mint-line: #6FE0B8;
+  --p-sky-fill:  #26485E;  --p-sky-line:  #8FCBFF;
+  --p-lav-fill:  #3E3663;  --p-lav-line:  #C0B4FF;
+  --p-teal-fill: #234E4E;  --p-teal-line: #2DD4D4;
+
+  --card-black-accent: #D71921;
+  --card-black-warn:   #B26A00;
+}
+
+/* ---------- 6. Base ---------- */
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background-color: var(--n-bg);
+  color: var(--n-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--n-accent); color: var(--n-accent-ink); }
+
+/* ---------- 7. Tipografi utility ---------- */
+/* ATURAN TIPOGRAFI: dot-matrix untuk KATA, mono untuk ANGKA.
+   Diuji, bukan diselerakan — di Ndot pada ukuran kartu, "52" terbaca "92",
+   "35" terbaca "39", dan "58" terbaca "98". Digit 3/5/6/8/9 memakai kisi
+   piksel yang nyaris sama. Salah membaca suhu disk 52°C sebagai 92°C persis
+   jenis kesalahan yang dashboard ini ada untuk mencegahnya, jadi angka
+   telemetri tidak pernah memakai font dot. */
+.n-num {                       /* kata besar — dot-matrix, tanda tangan Nothing */
+  font-family: var(--font-dot);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 0.95;
+}
+
+.n-num-mono {                  /* angka — mono, glyph jelas 5≠8≠0 */
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.n-label {                     /* metadata uppercase mono */
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--n-ink-soft);
+}
+
+.n-heading {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* ---------- 8. Kartu (bento) ---------- */
+.n-card {
+  background: var(--n-surface);
+  border: 1px solid var(--n-line);
+  border-radius: var(--n-radius);
+  box-shadow: var(--n-shadow);
+  padding: 18px 20px;
+  min-width: 0;                /* supaya isi panjang bisa menyusut, bukan meluber */
+}
+
+.n-card-black {                /* hitam di light, putih di dark */
+  background: var(--n-ink);
+  color: var(--n-bg);
+  border-color: var(--n-ink);
+}
+.n-card-black .n-label { color: var(--n-bg); opacity: .55; }
+/* Merah light-mode cuma 3.8:1 di atas kartu hitam; merah dark-mode cuma
+   3.3:1 di atas kartu putih. Jadi kartu ini memakai nada yang berlawanan
+   dengan halamannya, bukan satu warna untuk dua latar. */
+.n-card-black { --n-accent: var(--card-black-accent); --st-warn: var(--card-black-warn); }
+
+/* ---------- 9. Pill / badge ---------- */
+.n-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  padding: 4px 10px;
+  border-radius: var(--n-radius-pill);
+  border: 1px solid var(--n-line);
+  color: var(--n-ink-soft);
+  background: transparent;
+  white-space: nowrap;
+}
+.n-pill-warn { color: var(--st-warn); border-color: var(--st-warn); background: var(--st-warn-fill); }
+.n-pill-crit { color: var(--st-crit); border-color: var(--st-crit); background: var(--st-crit-fill); }
+.n-card-black .n-pill { color: var(--n-bg); border-color: rgba(244,244,244,.35); }
+
+/* ---------- 10. Dot status ---------- */
+.n-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.n-dot-ok   { background: var(--p-mint-line); }
+.n-dot-warn { background: var(--st-warn); }
+.n-dot-crit { background: var(--st-crit); }
+.n-dot-off  { background: var(--n-ink-faint); }
+
+/* ---------- 11. Tombol ---------- */
+.n-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.12em;
+  padding: 8px 14px;
+  border-radius: var(--n-radius-pill);
+  border: 1px solid var(--n-line-strong);
+  background: transparent;
+  color: var(--n-ink);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.n-btn:hover { background: var(--n-ink); color: var(--n-bg); }
+
+/* ---------- 12. Garis & scrollbar ---------- */
+.n-line-h { border: 0; border-top: 1px solid var(--n-line); margin: 0; }
+
+.n-scroll { overflow-x: auto; }
+.n-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+.n-scroll::-webkit-scrollbar-track { background: transparent; }
+.n-scroll::-webkit-scrollbar-thumb { background: var(--n-line); border-radius: 10px; }
+
+/* ---------- 13. Latar dot-grid ---------- */
+.n-appbg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(var(--n-line) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 0%, #000 0%, transparent 80%);
+          mask-image: radial-gradient(120% 90% at 50% 0%, #000 0%, transparent 80%);
+}
+
+/* ---------- 14. Animasi masuk — sekali, tidak berulang ---------- */
+@keyframes nFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.n-fade-in { animation: nFadeIn .35s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

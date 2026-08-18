@@ -2,7 +2,7 @@
 //
 // Sengaja tanpa dependensi YAML: formatnya sesederhana "kunci: nilai", dan
 // satu binary statis tanpa dependensi adalah alasan utama proyek ini memilih
-// Go (lihat plan bagian 5).
+// Go (lihat docs/design.md §3.1).
 package config
 
 import (
@@ -29,6 +29,13 @@ type Config struct {
 
 	// Pools yang ditampilkan. Kosong = deteksi otomatis lewat `zpool list`.
 	Pools []string
+
+	// Demo menyajikan data palsu dan TIDAK menyentuh sistem sama sekali:
+	// tidak ada zpool, tidak ada socket Docker, tidak ada cache SMART dibaca.
+	// Dipakai untuk menggarap tampilan kondisi sakit, dan supaya screenshot
+	// serta rekaman layar aman dibagikan — halaman ini menampilkan hostname,
+	// alamat IP, nama pool, dan nama app.
+	Demo bool
 }
 
 func Default() Config {
@@ -78,6 +85,8 @@ func Load(path string) (Config, error) {
 			c.SmartCache = val
 		case "docker_socket":
 			c.DockerSocket = val
+		case "demo":
+			c.Demo = val == "true" || val == "yes" || val == "1"
 		case "pools":
 			c.Pools = nil
 			for _, p := range strings.Split(val, ",") {
