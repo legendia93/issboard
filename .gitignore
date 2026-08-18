@@ -16,4 +16,8 @@ issboard.yaml
 
 # Konteks operasional mesin nyata — TIDAK PERNAH masuk repo publik ini.
 # Berisi hostname, alamat IP, nama pool, dan nama app milik host sungguhan.
-/konteks-lokal/
+# Versi genericnya yang boleh publik: docs/design.md
+# Tanpa garis miring di depan: cocok di kedalaman mana pun, termasuk
+# docs/konteks-lokal/ — jangan diubah jadi jalur absolut.
+konteks-lokal/
+dashboard-iss.md
