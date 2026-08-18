@@ -14,6 +14,7 @@ import (
 // Snapshot adalah seluruh data yang dilayani API pada satu titik waktu.
 type Snapshot struct {
 	CollectedAt time.Time   `json:"collected_at"`
+	System      System      `json:"system"`
 	Host        Host        `json:"host"`
 	Pools       []Pool      `json:"pools"`
 	Datasets    []Dataset   `json:"datasets"`
@@ -33,6 +34,11 @@ type Cache struct {
 	containers cached[[]Container]
 	host       cached[Host]
 	smart      cached[SmartReport]
+	system     cached[System]
+
+	// prevCPU adalah cuplikan /proc/stat sebelumnya. Pemakaian CPU tidak bisa
+	// dibaca sekali jalan — hanya selisih dua cuplikan yang berarti.
+	prevCPU CPUTimes
 }
 
 type cached[T any] struct {
@@ -63,6 +69,10 @@ func NewCache() *Cache {
 	c.containers.ttl = 30 * time.Second
 	c.host.ttl = 15 * time.Second
 	c.smart.ttl = 5 * time.Minute // TTL pembacaan FILE cache, bukan smartctl
+	// Distro, kernel, dan model CPU tidak berubah selama proses hidup.
+	// Suhu berubah, tapi ikut menumpang siklus yang sama supaya tidak ada
+	// pembacaan /sys tambahan tiap 15 detik.
+	c.system.ttl = 60 * time.Second
 	return c
 }
 
@@ -87,10 +97,20 @@ func (c *Cache) Collect(ctx context.Context, o Options) Snapshot {
 	}
 
 	if !c.host.fresh() {
-		c.host.set(CollectHost(ctx))
+		h, err := CollectHost(ctx)
+		if cur := ReadCPUTimes(); cur.Valid() {
+			h.CPUPercent = CPUPercent(c.prevCPU, cur)
+			c.prevCPU = cur
+		}
+		c.host.set(h, err)
 	}
 	s.Host = c.host.val
 	note(c.host.err)
+
+	if !c.system.fresh() {
+		c.system.set(CollectSystem(), nil)
+	}
+	s.System = c.system.val
 
 	if !c.pools.fresh() {
 		c.pools.set(CollectPools(ctx, o.Pools))

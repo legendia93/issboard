@@ -29,12 +29,15 @@
        saat halaman ini dibuka sambil lewat — ada yang perlu diurus atau tidak. -->
   <section id="hero" class="n-card n-card-black hero n-fade-in">
     <span class="n-label">status host</span>
-    <p id="verdict" class="n-num verdict">MEMUAT</p>
+    <div id="verdict" class="verdict"><p class="vtext">memuat…</p></div>
     <ul id="findings" class="findings"></ul>
   </section>
 
+  <!-- Satu kartu, bukan lima. Metrik host saling menjelaskan — CPU tinggi
+       bersama swap terisi bercerita lain daripada CPU tinggi sendirian —
+       jadi memisahkannya jadi kartu-kartu kecil justru memutus bacaannya. -->
   <h2 class="n-label section">host</h2>
-  <div id="host" class="bento"></div>
+  <div id="host"></div>
 
   <h2 class="n-label section">pool zfs</h2>
   <div id="pools" class="bento"></div>

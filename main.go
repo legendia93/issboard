@@ -31,6 +31,7 @@ var webFS embed.FS
 func main() {
 	cfgPath := flag.String("config", "/etc/issboard.yaml", "berkas konfigurasi")
 	demo := flag.Bool("demo", false, "sajikan data palsu; tidak menyentuh sistem sama sekali")
+	webDir := flag.String("web", "", "layani berkas web dari folder ini, bukan dari yang ter-embed")
 	flag.Parse()
 
 	cfg, err := config.Load(*cfgPath)
@@ -55,9 +56,20 @@ func main() {
 	}
 
 	idle := newIdleTimer(cfg.IdleTimeout)
-	static, err := fs.Sub(webFS, "web")
-	if err != nil {
-		log.Fatalf("embed web: %v", err)
+
+	// Saat menggarap tampilan, berkas ter-embed berarti tiap perubahan CSS
+	// butuh compile ulang. Flag ini melayaninya dari disk supaya cukup
+	// refresh browser. Hanya untuk mengembangkan: yang dipasang di server
+	// tetap satu binary tanpa berkas pendamping.
+	var static fs.FS
+	if *webDir != "" {
+		static = os.DirFS(*webDir)
+		log.Printf("issboard: melayani web dari %s (bukan yang ter-embed)", *webDir)
+	} else {
+		static, err = fs.Sub(webFS, "web")
+		if err != nil {
+			log.Fatalf("embed web: %v", err)
+		}
 	}
 
 	srv := &http.Server{

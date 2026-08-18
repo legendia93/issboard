@@ -2,6 +2,7 @@ package collector
 
 import (
 	"math"
+	"runtime"
 	"time"
 )
 
@@ -33,7 +34,17 @@ func DemoSnapshot() Snapshot {
 
 	return Snapshot{
 		CollectedAt: now,
+		System: System{
+			Distro:    "Demo Linux 13 (contoh)",
+			Kernel:    "6.12.0-demo-amd64",
+			Arch:      "amd64",
+			CPUModel:  "Demo CPU 8-Core @ 3.4GHz",
+			CPUCores:  8,
+			CPUTempC:  round2(wobble(48, 3, 120)),
+			GoVersion: runtime.Version(),
+		},
 		Host: Host{
+			CPUPercent:    round2(wobble(18, 9, 110)),
 			Hostname:      "demo-host",
 			Uptime:        int64(37*24*time.Hour/time.Second) + now.Unix()%3600,
 			Load1:         round2(wobble(0.42, 0.18, 90)),

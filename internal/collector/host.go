@@ -20,12 +20,18 @@ type Host struct {
 	ARCSizeBytes  int64   `json:"arc_size_bytes"`
 	ARCMaxBytes   int64   `json:"arc_max_bytes"`
 	ARCHitRatio   float64 `json:"arc_hit_ratio"`
+
+	// CPUPercent bernilai -1 kalau belum bisa dihitung: pemakaian CPU butuh
+	// dua cuplikan /proc/stat, jadi permintaan pertama setelah proses hidup
+	// belum punya pembanding. -1 dibedakan dari 0% yang sungguhan.
+	CPUPercent float64 `json:"cpu_percent"`
 }
 
 // CollectHost membaca /proc dan /proc/spl/kstat langsung. Tidak memanggil
 // proses apa pun: bagian ini harus tetap bekerja saat sistem sedang sibuk.
 func CollectHost(_ context.Context) (Host, error) {
 	var h Host
+	h.CPUPercent = -1
 	h.Hostname, _ = os.Hostname()
 
 	if b, err := os.ReadFile("/proc/uptime"); err == nil {

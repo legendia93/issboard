@@ -49,6 +49,26 @@ Efek sampingnya kebetulan penting: dashboard ini menampilkan hostname, IP, nama
 pool, dan nama app. Mode demo membuat **screenshot dan rekaman layar aman**,
 persis hal yang `.gitignore` repo ini susah payah jaga.
 
+## Putaran revisi setelah dilihat di HP
+
+- **Metrik host digabung jadi SATU kartu**, bukan lima kartu terpisah. Metrik
+  host saling menjelaskan — CPU tinggi bersama swap terisi bercerita lain
+  daripada CPU tinggi sendirian — dan lima kartu membuat halaman dua kali
+  lebih panjang di HP.
+- **Chip di section container & dataset meluber keluar kartu di HP.** Chip
+  duduk di kolom `auto` baris pertama, dan teks seperti `0.0.0.0:5432->5432/tcp`
+  yang tidak boleh dipenggal memaksa kolom itu melebar. Sekarang chip turun ke
+  barisnya sendiri dan boleh berganti baris di dalam dirinya.
+- **Vonis hero tidak lagi kapital semua.** "6 KRITIS / 8 PERHATIAN" membuat
+  teksnya berebut perhatian dengan angkanya. Sekarang angka besar + kata kecil
+  huruf biasa: "6 — perlu ditangani sekarang".
+- **Tiap metrik bisa diketuk untuk penjelasan**: apa yang diukur, dibaca dari
+  mana, dan angka seperti apa yang bermasalah. Sengaja bukan atribut `title`:
+  tooltip hover tidak ada di layar sentuh, dan halaman ini paling sering dibuka
+  dari HP. Nama seperti "ARC" tidak menjelaskan dirinya sendiri.
+- **Metrik sistem ditambahkan** meniru dashboard `lookna`: CPU%, swap, distro,
+  kernel, arsitektur, model & jumlah core CPU, suhu CPU.
+
 ## Yang ditemukan saat mengerjakan
 
 Dua hal yang tidak terduga, keduanya sudah diperbaiki dan dicatat di

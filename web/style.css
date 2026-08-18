@@ -55,15 +55,31 @@
 /* ---------- Kartu hero ---------- */
 .hero { padding: 22px 24px 20px; }
 
-.verdict {
-  font-size: clamp(30px, 8vw, 52px);
-  margin: 10px 0 0;
+.verdict { margin: 12px 0 0; }
+
+/* Angka besar, kata kecil. Angkanya memakai mono, bukan dot-matrix —
+   lihat aturan tipografi di nothing.css. */
+.vrow { display: flex; align-items: baseline; gap: 14px; margin-top: 6px; }
+
+.vnum {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(38px, 11vw, 58px);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  min-width: 1.1em;
+}
+.vnum.crit { color: var(--n-accent); }
+.vnum.warn { color: var(--st-warn); }
+
+.vtext { font-size: 14px; opacity: .82; margin: 0; }
+
+.vok {
+  font-size: clamp(34px, 9vw, 50px);
+  margin: 0 0 8px;
   line-height: 1;
 }
-/* Vonis tetap memakai warna kartu saat sehat. Warna pekat hanya muncul
-   kalau memang ada yang perlu diurus — itu seluruh gunanya. */
-.verdict.warn { color: var(--st-warn); }
-.verdict.crit { color: var(--n-accent); }
 
 .findings { list-style: none; margin: 18px 0 0; padding: 0; }
 .findings li {
@@ -189,10 +205,92 @@
 }
 .row .rtail { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 
-/* Di layar sempit, metadata pindah ke baris kedua daripada terpotong. */
+/* ---------- Metrik di dalam satu kartu host ----------
+   Satu kartu, bukan lima: metrik host saling menjelaskan, dan memisahkannya
+   jadi kartu kecil-kecil memutus bacaannya sekaligus membuat halaman jauh
+   lebih panjang di HP. */
+.metrics {
+  display: grid;
+  /* 132px, bukan 150px: di HP 390px lebarnya, isi kartu tinggal ~318px —
+     dua kolom 150px butuh 326px dan gagal tipis, jadi semuanya menumpuk
+     satu kolom dan halaman jadi dua kali lebih panjang. */
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 22px 20px;
+}
+.metric { min-width: 0; }
+
+/* Label yang bisa diketuk untuk membuka penjelasan. Dibuat tombol asli supaya
+   keyboard dan pembaca layar ikut kebagian, tapi tampil seperti label biasa. */
+.metric-label {
+  display: inline-flex; align-items: center; gap: 5px;
+  /* Hanya chrome tombolnya yang direset. Ukuran & huruf sudah diatur kelas
+     .n-label yang ikut menempel — `font: inherit` di sini justru menimpanya
+     dan membuat labelnya kebesaran. */
+  background: none; border: 0; padding: 0;
+  cursor: pointer; text-align: left;
+}
+.metric-label::after {
+  content: '?';
+  display: inline-grid; place-items: center;
+  width: 13px; height: 13px;
+  border: 1px solid var(--n-line); border-radius: 50%;
+  font-size: 9px; letter-spacing: 0;
+  color: var(--n-ink-faint);
+}
+.metric-label[aria-expanded="true"]::after { content: '×'; border-color: var(--n-ink-soft); }
+.metric-label:hover::after { border-color: var(--n-ink); color: var(--n-ink); }
+
+.hint {
+  margin: 10px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--n-line);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--n-ink-soft);
+}
+.metric .stat { margin-top: 8px; font-size: 26px; }
+.metric .bar { margin-top: 10px; }
+.metric .spark { height: 26px; margin-top: 10px; }
+
+/* Identitas mesin dilipat: jarang dibutuhkan, tapi harus ada saat dibutuhkan. */
+.sysinfo { margin-top: 20px; border-top: 1px solid var(--n-line); padding-top: 14px; }
+.sysinfo summary { cursor: pointer; list-style: none; }
+.sysinfo summary::-webkit-details-marker { display: none; }
+.sysinfo summary::before { content: '+ '; }
+.sysinfo[open] summary::before { content: '– '; }
+.sysinfo summary:hover { color: var(--n-ink); }
+.sysinfo .kv { margin-top: 14px; }
+
+/* ---------- Daftar kunci–nilai (informasi sistem) ---------- */
+.kv {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px 20px;
+  margin: 0;
+  font-size: 13px;
+}
+.kv dt {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--n-ink-soft);
+  align-self: center;
+}
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+
+/* Di layar sempit, metadata DAN chip masing-masing turun ke barisnya sendiri.
+   Sebelumnya chip duduk di kolom "auto" baris pertama, dan teks sepanjang
+   "0.0.0.0:5432->5432/tcp" yang tidak boleh dipenggal memaksa kolom itu
+   melebar sampai keluar kartu. */
 @media (max-width: 560px) {
-  .row {
-    grid-template-columns: 14px minmax(0,1fr) auto;
-  }
-  .row .rmeta { grid-column: 2 / -1; }
+  .row { grid-template-columns: 14px minmax(0, 1fr); }
+  .row .rmeta,
+  .row .rtail { grid-column: 2 / -1; }
+  .row .rtail { justify-content: flex-start; margin-top: 4px; }
+  /* Di sini chip boleh berganti baris di dalam dirinya sendiri: terpenggal
+     lebih baik daripada terpotong — nomor port harus tetap terbaca utuh. */
+  .row .rtail .n-pill { white-space: normal; overflow-wrap: anywhere; }
+  .kv { grid-template-columns: 1fr; gap: 2px; }
+  .kv dd { margin-bottom: 10px; }
 }
