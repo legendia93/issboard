@@ -13,3 +13,7 @@ issboard.yaml
 *token*
 *.key
 *.pem
+
+# Konteks operasional mesin nyata — TIDAK PERNAH masuk repo publik ini.
+# Berisi hostname, alamat IP, nama pool, dan nama app milik host sungguhan.
+/konteks-lokal/
