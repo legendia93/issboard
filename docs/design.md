@@ -459,13 +459,20 @@ tidak ada alasan menuliskannya dua kali.
 
 ## 10. Status & yang belum ada
 
-v1 berjalan dan menyajikan data nyata, dengan tampilan Nothing OS, mode demo,
-notifikasi lewat `issboard-agent` yang terpisah, sparkline riwayat, test
-otomatis, dan paket `.deb`.
+v1 **sudah terpasang dan berjalan di host sungguhan** sejak 21 Agustus 2026,
+dengan tampilan Nothing OS, mode demo, notifikasi lewat `issboard-agent` yang
+terpisah, sparkline riwayat, test otomatis, dan paket `.deb`.
+
+Pemasangan pertama itu sendiri menemukan enam cacat yang tidak satu pun bisa
+muncul di mesin pengembangan — dicatat lengkap di
+[`plan/05-pemasangan.md`](plan/05-pemasangan.md), beserta pelajaran yang
+berlaku di luar proyek ini. Yang paling ringkas: **aturan baru harus diuji
+terhadap mesin yang sehat, bukan cuma terhadap mesin yang sakit**, dan
+**ketiadaan data bukan data buruk**.
 
 Yang **belum diuji** dicatat apa adanya di [`distro.md`](distro.md) dan di
-tiap berkas rencana — SELinux enforcing, Podman, Telegram ke API aslinya,
-unit systemd di bawah systemd sungguhan, dan arsitektur selain amd64.
+tiap berkas rencana — notifikasi yang benar-benar terkirim, `alert_repeat` 24
+jam, SELinux enforcing, Podman, dan arsitektur selain amd64.
 
 Rencana yang sedang berjalan — beserta urutannya — ada di
 [`plan/`](plan/00-index.md). Ringkasnya yang belum:

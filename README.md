@@ -12,8 +12,11 @@ Di atas semuanya ada **satu vonis**: sehat, atau sekian hal yang perlu diurus â€
 supaya pertanyaan yang sebenarnya dicari terjawab tanpa membaca satu kartu pun.
 Vonis yang sama itulah yang dikirim ke HP oleh `issboard-agent`.
 
-> **Status: v1 awal.** Berjalan dan menyajikan data nyata, tapi belum dipakai
-> lama di produksi.
+> **Status: v1, terpasang.** Sudah berjalan di host sungguhan sejak 21 Agustus
+> 2026 â€” tapi belum lama, dan notifikasinya belum pernah benar-benar terkirim.
+> Pemasangan pertama itu menemukan enam cacat yang tidak satu pun bisa muncul
+> di mesin pengembangan; semuanya dicatat di
+> [`docs/plan/05-pemasangan.md`](docs/plan/05-pemasangan.md).
 >
 > Notifikasi dan sparkline riwayat sudah ada, lewat
 > [`issboard-agent`](#notifikasi--riwayat-issboard-agent) yang terpisah.

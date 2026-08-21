@@ -33,9 +33,17 @@ Ditetapkan 18 Agustus 2026:
 | 2 | [`02-agent.md`](02-agent.md) — riwayat + notifikasi (ntfy, Telegram) | ✅ selesai |
 | 3 | [`03-sparkline.md`](03-sparkline.md) — grafik mengisi ruang fase 1 | ✅ selesai |
 | 4 | [`04-distribusi.md`](04-distribusi.md) — test, `.deb`, Docker, multi-distro | ✅ selesai |
+| 5 | [`05-pemasangan.md`](05-pemasangan.md) — pasang di mesin sungguhan | ✅ selesai |
 
-Keempat fase yang direncanakan sudah selesai. Yang tersisa di bawah belum
-pernah dijadwalkan, dan sebagiannya menunggu keputusan, bukan menunggu waktu.
+Keempat fase yang direncanakan sudah selesai, dan issboard **sudah berjalan di
+host sungguhan** sejak 21 Agustus 2026.
+
+Fase 5 tidak ada di rencana awal. Ia ditambahkan setelah kenyataan
+membuktikannya perlu: pemasangan pertama menemukan **enam cacat** yang tidak
+satu pun bisa muncul di mesin pengembangan — termasuk satu yang mematikan
+dashboard sepenuhnya, dan satu alarm kritis palsu di menit pertama. Rinciannya
+di [`05-pemasangan.md`](05-pemasangan.md); yang tersisa di bawah belum pernah
+dijadwalkan, dan sebagiannya menunggu keputusan, bukan menunggu waktu.
 
 ## Di luar fase (belum dijadwalkan)
 
