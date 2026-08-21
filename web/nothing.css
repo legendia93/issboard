@@ -17,6 +17,21 @@
   font-display: swap;
 }
 
+/* ---------- 1b. `hidden` harus benar-benar menyembunyikan ----------
+   Aturan bawaan browser cuma `[hidden] { display: none }` — selektor
+   dengan spesifisitas serendah mungkin. Begitu sebuah komponen di sini
+   menetapkan display-nya sendiri (`.n-pill { display: inline-flex }`,
+   `.n-card`, dan seterusnya), komponen itu MENANG dan elemen yang sudah
+   ditandai `hidden` tetap tampil.
+
+   Akibatnya di mesin sungguhan: pil "DATA PALSU" muncul di dashboard yang
+   datanya justru asli. Label yang berbohong tentang keaslian data adalah
+   bug termahal yang bisa dipunyai halaman ini — seluruh gunanya bertumpu
+   pada angka di layar bisa dipercaya.
+
+   Satu baris ini menutupnya untuk semua kasus, termasuk yang belum ada. */
+[hidden] { display: none !important; }
+
 /* ---------- 2. Token netral ---------- */
 :root {                       /* LIGHT — default */
   --n-bg:         #F4F4F4;    /* off-white kanvas */
