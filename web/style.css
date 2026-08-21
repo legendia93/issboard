@@ -168,13 +168,21 @@
 .bar.warn > i { background: var(--st-warn-fill); border-right-color: var(--st-warn); }
 .bar.crit > i { background: var(--st-crit-fill); border-right-color: var(--n-accent); }
 
-/* ---------- Ruang sparkline (fase 3) ----------
-   Tingginya dikunci sejak sekarang supaya grafik nanti mengisi tanpa
-   menggeser satu pun kartu. Baseline titik-titik menandai bahwa ruang
-   ini memang disediakan, bukan celah kosong yang tidak disengaja. */
-.spark {
-  height: 34px;
-  margin-top: 12px;
+/* ---------- Sparkline ----------
+   Tingginya sudah dikunci sejak fase 1, jadi grafiknya mengisi tanpa
+   menggeser satu pun kartu. Garisnya memakai --line dari pastel kartu
+   yang sama: warna di sini identitas data, bukan status.
+
+   Tidak ada animasi. Grafik yang bergerak sendiri melelahkan dan
+   membuang daya HP — dan halaman ini paling sering dibuka dari HP. */
+.spark { height: 34px; margin-top: 12px; }
+.spark svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+/* Kotak yang MEMANG belum punya riwayat: baseline titik-titik menandai
+   ruangnya disediakan, bukan celah kosong yang tidak disengaja. Disk yang
+   sedang tidur berhenti di sini, dan itu benar — suhunya tidak terbaca,
+   bukan nol. */
+.spark.empty {
   border-radius: 8px;
   background-image: radial-gradient(var(--n-line) 1px, transparent 1px);
   background-size: 8px 8px;

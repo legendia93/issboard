@@ -15,8 +15,8 @@ Vonis yang sama itulah yang dikirim ke HP oleh `issboard-agent`.
 > **Status: v1 awal.** Berjalan dan menyajikan data nyata, tapi belum dipakai
 > lama di produksi. Belum ada test otomatis.
 >
-> Notifikasi sudah ada, lewat [`issboard-agent`](#notifikasi--riwayat-issboard-agent)
-> yang terpisah. Sparkline yang memakai riwayatnya belum.
+> Notifikasi dan sparkline riwayat sudah ada, lewat
+> [`issboard-agent`](#notifikasi--riwayat-issboard-agent) yang terpisah.
 >
 > Rencana yang sedang berjalan ada di [`docs/plan/`](docs/plan/00-index.md);
 > alasan di balik bentuknya ada di [`docs/design.md`](docs/design.md).
@@ -187,7 +187,27 @@ Alert yang berisik selalu berakhir sama: diabaikan, lalu dimatikan. Karena itu:
 `history.json` adalah ring buffer dua lapis: **60 titik tiap menit** (1 jam
 terakhir) dan **48 titik tiap 30 menit** (24 jam terakhir), ditulis atomik,
 di bawah 20 KB. issboard **membacanya**, tidak pernah menulisnya — pola yang
-sama dengan cache SMART. Sparkline yang memakainya menyusul di fase 3.
+sama dengan cache SMART.
+
+Sparkline di tiap kartu memakai riwayat itu, dan tombol **1 jam / 24 jam** di
+pojok kanan atas menukar lapis halus dengan lapis kasar. Grafiknya digambar
+tangan sebagai satu `<path>` SVG — tanpa pustaka grafik, supaya janji "tidak
+ada aset dari luar" tetap utuh.
+
+Tiga hal yang sengaja tidak dikarang oleh grafik ini:
+
+- **Riwayat yang bolong digambar putus**, bukan disambung lurus. Garis lurus
+  palsu justru menyembunyikan hal yang ingin diketahui: ada periode yang tidak
+  terpantau.
+- **Disk yang sedang tidur tidak punya garis sama sekali.** Suhunya tidak
+  terbaca, dan itu bukan 0 °C.
+- **Sumbu Y punya rentang minimum.** Pool yang bergerak 0,4% dalam sejam tidak
+  boleh tergambar seperti tebing — dashboard yang bikin panik karena skala,
+  bukan karena data, adalah kebalikan dari gunanya.
+
+Kalau agent-nya mati, halaman menyebutkannya di bawah judul **host**. Agent
+tidak bisa mengabari bahwa dirinya sendiri berhenti jalan, jadi dashboard
+adalah satu-satunya tempat hal itu bisa ketahuan.
 
 ## Keamanan
 
@@ -206,6 +226,7 @@ sama dengan cache SMART. Sparkline yang memakainya menyusul di fase 3.
 |---|---|
 | `GET /api/v1/health` | liveness, tanpa mengumpulkan apa pun |
 | `GET /api/v1/status` | seluruh snapshot: host, pools, datasets, containers, smart, plus `verdict` & `findings[]` |
+| `GET /api/v1/history` | ring buffer dua lapis yang ditulis `issboard-agent`; membaca berkas, tidak mengumpulkan apa pun |
 
 Kegagalan per-bagian muncul di `errors[]`, bukan menggagalkan seluruh respons —
 dan tetap dilaporkan selama datanya masih dilayani dari cache, bukan cuma di

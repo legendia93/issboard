@@ -11,6 +11,9 @@
 'use strict';
 
 const REFRESH_MS = 15000;
+// Riwayat ditulis agent tiap menit, jadi menariknya tiap 15 detik cuma
+// membaca berkas yang sama tiga kali sia-sia.
+const HISTORY_MS = 60000;
 
 /* ---------- helper DOM ----------
    Sengaja membangun node, bukan merangkai innerHTML: nama container, image,
@@ -81,6 +84,221 @@ function pastelFor(name) {
   return `--fill: var(--p-${p}-fill); --line: var(--p-${p}-line);`;
 }
 
+/* ---------- sparkline ----------
+   Digambar tangan sebagai satu <path> SVG. TIDAK ADA pustaka grafik: deret
+   angka jadi garis itu belasan baris, dan menariknya akan melanggar janji
+   "tanpa aset pihak ketiga" yang membuat halaman ini bisa disajikan dengan
+   default-src 'self' di host tanpa internet.
+
+   Warnanya memakai pastel yang sama dengan bar di kartu yang sama — pastel
+   di sini identitas ("pool yang mana"), bukan status. */
+
+let HIST = null;   // isi /api/v1/history
+let LAST = null;   // snapshot /api/v1/status terakhir, untuk digambar ulang
+let RANGE = localStorage.getItem('issboard-range') === 'coarse' ? 'coarse' : 'fine';
+
+/* Titik live dari polling /status, disimpan di memori browser saja.
+   Agent menulis riwayat tiap menit; menyambung titik yang baru saja dibaca ke
+   ekor grafik membuat halaman terasa hidup tanpa daemon di server. Hilang
+   saat halaman ditutup, dan itu memang tidak masalah — yang permanen ada di
+   berkas milik agent. */
+const LIVE = new Map();
+const LIVE_MAX = 240;
+
+function liveKey(spec) { return spec.k + (spec.name ? ':' + spec.name : ''); }
+
+function pushLive(spec, t, v) {
+  const k = liveKey(spec);
+  const arr = LIVE.get(k) || [];
+  const last = arr[arr.length - 1];
+  if (last && t - last.t < 5) return;   // hindari dobel saat refresh manual
+  arr.push({ t, v });
+  if (arr.length > LIVE_MAX) arr.splice(0, arr.length - LIVE_MAX);
+  LIVE.set(k, arr);
+}
+
+// Nilai satu metrik dari satu titik riwayat. null berarti TIDAK TERBACA —
+// dibedakan dari nol, dan digambar sebagai putus, bukan sebagai jurang.
+function pointValue(p, spec) {
+  switch (spec.k) {
+    case 'cpu':   return p.cpu < 0 ? null : p.cpu;   // -1 = belum terhitung
+    case 'load1': return p.load1;
+    case 'mem':   return p.mem_used;
+    case 'swap':  return p.swap_used;
+    case 'arc':   return p.arc;
+    case 'pool':  return p.pools ? valOrNull(p.pools[spec.name]) : null;
+    case 'disk':  return p.disks ? valOrNull(p.disks[spec.name]) : null;
+  }
+  return null;
+}
+
+function valOrNull(v) { return (v === undefined || v === null) ? null : v; }
+
+// Nilai yang sama, tapi dari snapshot /status — supaya ekor grafiknya
+// menyambung ke angka yang sedang tertulis besar di kartu.
+function liveValue(d, spec) {
+  const h = d.host || {};
+  switch (spec.k) {
+    case 'cpu':   return h.cpu_percent < 0 ? null : round1(h.cpu_percent);
+    case 'load1': return h.load1;
+    case 'mem':   return h.mem_total_bytes - h.mem_available_bytes;
+    case 'swap':  return h.swap_total_bytes - h.swap_free_bytes;
+    case 'arc':   return h.arc_size_bytes;
+    case 'pool': {
+      const p = (d.pools || []).find((x) => x.name === spec.name);
+      return p && p.size_bytes > 0 ? round1((p.alloc_bytes / p.size_bytes) * 100) : null;
+    }
+    case 'disk': {
+      const k = ((d.smart || {}).disks || []).find((x) => x.device === spec.name);
+      // Disk tidur tidak melaporkan suhu; itu bukan 0 °C.
+      return k && !k.standby && k.temperature_c ? k.temperature_c : null;
+    }
+  }
+  return null;
+}
+
+function round1(v) { return Math.round(v * 10) / 10; }
+
+/* Rentang sumbu Y.
+
+   Autoscale murni membesar-besarkan hal sepele: pool yang bergerak dari 62,0%
+   ke 62,4% akan tergambar seperti tebing. Karena itu tiap metrik punya
+   rentang MINIMUM — grafiknya baru benar-benar naik kalau perubahannya
+   memang berarti. */
+const SPAN_MIN = {
+  cpu: 20, load1: 0.5, pool: 8, disk: 6,
+};
+
+function domain(values, spec) {
+  let lo = Math.min(...values), hi = Math.max(...values);
+  // Metrik byte tidak punya satuan tetap, jadi minimumnya relatif.
+  const min = SPAN_MIN[spec.k] !== undefined ? SPAN_MIN[spec.k] : Math.max(hi * 0.08, 1);
+  if (hi - lo < min) {
+    const mid = (hi + lo) / 2;
+    lo = mid - min / 2;
+    hi = mid + min / 2;
+  }
+  // Persen tidak pernah keluar 0..100; menggambar di luar itu menyesatkan.
+  if (spec.k === 'cpu' || spec.k === 'pool') { lo = Math.max(0, lo); hi = Math.min(100, hi); }
+  if (spec.k === 'load1') lo = Math.max(0, lo);
+  if (hi - lo <= 0) hi = lo + 1;
+  return [lo, hi];
+}
+
+/* Memecah deret jadi potongan-potongan yang boleh disambung.
+
+   Riwayat yang bolong — agent mati, mesin baru menyala — digambar PUTUS.
+   Menyambungnya lurus akan menyembunyikan justru hal yang ingin diketahui:
+   ada periode yang tidak terpantau sama sekali. */
+function segments(series, step) {
+  const out = [];
+  let cur = [];
+  let prev = null;
+  for (const s of series) {
+    const bolong = prev !== null && (s.t - prev) > step * 2.5;
+    if (s.v === null || bolong) {
+      if (cur.length) out.push(cur);
+      cur = [];
+    }
+    if (s.v !== null) cur.push(s);
+    prev = s.t;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+const SPARK_H = 34;
+
+function sparkSVG(series, step, spec) {
+  const vals = series.filter((s) => s.v !== null).map((s) => s.v);
+  if (vals.length < 2) return null;
+
+  const [lo, hi] = domain(vals, spec);
+  const t0 = series[0].t;
+  const tspan = Math.max(1, series[series.length - 1].t - t0);
+  const pad = 2;
+  const x = (t) => ((t - t0) / tspan) * 100;
+  const y = (v) => SPARK_H - pad - ((v - lo) / (hi - lo)) * (SPARK_H - pad * 2);
+
+  let d = '';
+  for (const seg of segments(series, step)) {
+    if (seg.length === 1) {
+      // Titik tunggal tidak menghasilkan garis apa pun. Diberi ruas sangat
+      // pendek supaya tetap terlihat — data satu titik tetap data.
+      d += `M${x(seg[0].t).toFixed(2)} ${y(seg[0].v).toFixed(2)}h.6`;
+      continue;
+    }
+    seg.forEach((s, i) => {
+      d += (i ? 'L' : 'M') + x(s.t).toFixed(2) + ' ' + y(s.v).toFixed(2) + ' ';
+    });
+  }
+  if (!d) return null;
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 100 ${SPARK_H}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', d.trim());
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'var(--line, var(--n-ink-soft))');
+  path.setAttribute('stroke-width', '1.5');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  // Tanpa ini, garisnya ikut melar mengikuti lebar kartu dan jadi tebal
+  // sebelah — akibat preserveAspectRatio="none" yang memang disengaja.
+  path.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.append(path);
+  return svg;
+}
+
+// Ringkasan yang bisa dibaca pembaca layar dan ditampilkan sebagai judul —
+// grafik tanpa angka tidak berarti apa-apa kalau tidak bisa dilihat.
+function sparkTitle(series, spec) {
+  const vals = series.filter((s) => s.v !== null).map((s) => s.v);
+  if (!vals.length) return 'belum ada riwayat';
+  const fmt = (v) => (spec.k === 'mem' || spec.k === 'arc' || spec.k === 'swap')
+    ? bytes(v) : String(round1(v));
+  const jam = RANGE === 'coarse' ? '24 jam' : '1 jam';
+  return `${jam} terakhir · terendah ${fmt(Math.min(...vals))} · tertinggi ${fmt(Math.max(...vals))}`;
+}
+
+/* Satu kotak sparkline. Ukurannya sudah dikunci sejak fase 1, jadi mengisinya
+   tidak menggeser satu pun kartu. */
+function spark(spec) {
+  const box = el('div', { class: 'spark' });
+  if (spec && spec.name) box.style.cssText = pastelFor(spec.name);
+  else if (spec) box.style.cssText = pastelFor(spec.k);
+
+  if (!HIST) {
+    box.classList.add('empty');
+    box.title = 'riwayat belum dimuat';
+    return box;
+  }
+
+  const layer = RANGE === 'coarse' ? HIST.coarse : HIST.fine;
+  const step = (layer && layer.step_seconds) || 60;
+  let series = ((layer && layer.points) || []).map((p) => ({ t: p.t, v: pointValue(p, spec) }));
+
+  // Titik live cuma disambung ke lapis halus. Di grafik 24 jam, satu titik
+  // semenit tidak menambah apa pun selain kerja.
+  if (RANGE === 'fine') {
+    const live = LIVE.get(liveKey(spec)) || [];
+    const akhir = series.length ? series[series.length - 1].t : 0;
+    for (const s of live) if (s.t > akhir) series.push(s);
+  }
+
+  const svg = sparkSVG(series, step, spec);
+  if (!svg) {
+    box.classList.add('empty');
+    box.title = HIST.note || 'belum cukup riwayat untuk digambar';
+    return box;
+  }
+  box.title = sparkTitle(series, spec);
+  box.append(svg);
+  return box;
+}
+
 /* ---------- temuan ---------- */
 const RANK = { crit: 2, warn: 1, ok: 0 };
 
@@ -101,6 +319,8 @@ function statusDot(level) {
 
 /* ---------- render ---------- */
 function render(d) {
+  LAST = d;
+  collectLive(d);
   const worst = worstBySubject(d.findings);
 
   renderHeader(d);
@@ -113,12 +333,33 @@ function render(d) {
   renderErrors(d);
 }
 
+// Mencatat nilai yang baru saja dibaca supaya ekor grafik ikut bergerak di
+// antara dua tulisan agent. Hanya di memori browser — server tetap tidak
+// menyimpan apa pun selama halaman terbuka.
+function collectLive(d) {
+  const t = Math.floor(new Date(d.collected_at).getTime() / 1000) || Math.floor(Date.now() / 1000);
+  const spesifikasi = [{ k: 'cpu' }, { k: 'load1' }, { k: 'mem' }, { k: 'swap' }, { k: 'arc' }];
+  for (const p of d.pools || []) spesifikasi.push({ k: 'pool', name: p.name });
+  for (const k of ((d.smart || {}).disks || [])) spesifikasi.push({ k: 'disk', name: k.device });
+  for (const spec of spesifikasi) {
+    const v = liveValue(d, spec);
+    if (v !== null && v !== undefined && !Number.isNaN(v)) pushLive(spec, t, v);
+  }
+}
+
 function renderHeader(d) {
   const hp = $('host-pill');
   hp.textContent = d.host && d.host.hostname ? d.host.hostname : '—';
   hp.hidden = false;
   $('demo-pill').hidden = !d.demo;
   $('updated').textContent = 'diperbarui ' + relTime(d.collected_at);
+
+  // Grafik kosong punya dua arti yang jauh berbeda: mesin baru dipasang, atau
+  // timer agent-nya mati. Tanpa catatan ini keduanya terlihat sama — halaman
+  // yang tenang. Agent tidak bisa mengabari bahwa dirinya sendiri berhenti.
+  const hn = $('hist-note');
+  hn.textContent = (HIST && HIST.note) || '';
+  hn.hidden = !hn.textContent;
 }
 
 function renderHero(d) {
@@ -147,10 +388,11 @@ function renderHero(d) {
   if (v.warn) out.append(baris(v.warn, 'perlu diperiksa', 'warn'));
 }
 
-// Satu blok metrik di dalam kartu host. `spark` menyisakan ruang berukuran
-// tetap untuk grafik riwayat (fase 3) supaya nanti mengisi tanpa menggeser
-// apa pun; metrik yang memang tidak akan punya riwayat tidak memesan ruang.
-function metric(label, value, unit, sub, extra, spark, help) {
+// Satu blok metrik di dalam kartu host. `sp` adalah spesifikasi sparkline
+// ({k: 'cpu'} dan seterusnya); ruangnya sudah berukuran tetap sejak fase 1,
+// jadi grafiknya mengisi tanpa menggeser apa pun. Metrik yang memang tidak
+// punya riwayat — uptime — tidak memesan ruang sama sekali.
+function metric(label, value, unit, sub, extra, sp, help) {
   // Label bisa diketuk untuk membuka penjelasan. Sengaja BUKAN atribut title:
   // tooltip hover tidak ada di layar sentuh, dan halaman ini paling sering
   // dibuka dari HP. Nama indikator seperti "ARC" tidak menjelaskan dirinya
@@ -174,7 +416,7 @@ function metric(label, value, unit, sub, extra, spark, help) {
       value, unit ? el('span', { class: 'unit' }, unit) : null),
     extra || null,
     sub ? el('div', { class: 'sub' }, sub) : null,
-    spark ? el('div', { class: 'spark', title: 'riwayat menyusul' }) : null,
+    sp ? spark(sp) : null,
     hint);
 }
 
@@ -217,21 +459,21 @@ function renderHost(h, sys) {
     // -1 berarti belum ada dua cuplikan /proc/stat untuk dibandingkan, bukan
     // 0% terpakai. Ditulis "—" supaya tidak terbaca sebagai mesin menganggur.
     h.cpu_percent < 0
-      ? metric('cpu', '—', '', 'butuh dua pembacaan untuk dihitung', null, true, HELP.cpu)
+      ? metric('cpu', '—', '', 'butuh dua pembacaan untuk dihitung', null, { k: 'cpu' }, HELP.cpu)
       : metric('cpu', Math.round(h.cpu_percent), '%',
         sys && sys.cpu_cores ? `${sys.cpu_cores} core` : null,
-        bar(h.cpu_percent, h.cpu_percent >= 90 ? 'crit' : 'ok', pastelFor('cpu')), true, HELP.cpu),
+        bar(h.cpu_percent, h.cpu_percent >= 90 ? 'crit' : 'ok', pastelFor('cpu')), { k: 'cpu' }, HELP.cpu),
 
     metric('memori', memPct, '%',
       `${bytes(memUsed)} dari ${bytes(h.mem_total_bytes)}`,
-      bar(memPct, memPct >= 90 ? 'crit' : memPct >= 80 ? 'warn' : 'ok', pastelFor('mem')), true, HELP.mem),
+      bar(memPct, memPct >= 90 ? 'crit' : memPct >= 80 ? 'warn' : 'ok', pastelFor('mem')), { k: 'mem' }, HELP.mem),
 
     // ARC penuh itu normal dan justru diinginkan — ZFS memang memakai RAM
     // yang menganggur sebagai cache. Bar ini tidak pernah jadi warna pekat:
     // ia informasi, bukan peringatan.
     metric('arc zfs', bytes(h.arc_size_bytes), '',
       `${arcPct}% dari batas · hit ${h.arc_hit_ratio.toFixed(1)}%`,
-      bar(arcPct, 'ok', pastelFor('arc')), true, HELP.arc),
+      bar(arcPct, 'ok', pastelFor('arc')), { k: 'arc' }, HELP.arc),
 
     // Swap yang terpakai penting justru saat RAM terlihat lega: mesin itu
     // sedang menukar kecepatan dengan diam-diam.
@@ -239,16 +481,16 @@ function renderHost(h, sys) {
       ? metric('swap', bytes(swapUsed), '',
         `dari ${bytes(h.swap_total_bytes)}`,
         bar(pct(swapUsed, h.swap_total_bytes),
-          pct(swapUsed, h.swap_total_bytes) >= 50 ? 'warn' : 'ok', pastelFor('swap')), true, HELP.swap)
+          pct(swapUsed, h.swap_total_bytes) >= 50 ? 'warn' : 'ok', pastelFor('swap')), { k: 'swap' }, HELP.swap)
       : metric('swap', '—', '', 'tidak ada swap', null, false, HELP.swap),
 
     // Load average BUKAN persen: 4,0 di mesin 8 core berarti setengah beban.
     // Karena itu tidak diberi bar — bar menyiratkan skala 0–100 yang keliru.
     metric('load 1m', h.load1.toFixed(2), '',
       `5m ${h.load5.toFixed(2)} · 15m ${h.load15.toFixed(2)}`
-      + (sys && sys.cpu_cores ? ` · dari ${sys.cpu_cores} core` : ''), null, true, HELP.load),
+      + (sys && sys.cpu_cores ? ` · dari ${sys.cpu_cores} core` : ''), null, { k: 'load1' }, HELP.load),
 
-    metric('uptime', up[0], up[1], 'sejak boot terakhir', null, false, HELP.uptime));
+    metric('uptime', up[0], up[1], 'sejak boot terakhir', null, null, HELP.uptime));
 
   box.append(el('div', { class: 'n-card' }, grid, systemDetails(sys, h)));
 }
@@ -317,7 +559,7 @@ function renderPools(pools, worst) {
         el('br'),
         'scrub: ' + scrubText(p.scan_line)),
 
-      el('div', { class: 'spark', title: 'riwayat menyusul' })));
+      spark({ k: 'pool', name: p.name })));
   }
 }
 
@@ -357,7 +599,10 @@ function renderDisks(smart, worst) {
         el('br'),
         'self-test: ' + (d.last_self_test || 'belum pernah selesai')),
 
-      el('div', { class: 'spark', title: 'riwayat menyusul' })));
+      // Disk yang sedang tidur memang tidak punya riwayat suhu: agent TIDAK
+      // mencatat disk standby, karena 0 °C akan terbaca sebagai dingin.
+      // Kotaknya dibiarkan kosong, bukan diisi garis nol yang mengarang.
+      spark({ k: 'disk', name: d.device })));
   }
 }
 
@@ -448,6 +693,24 @@ function initTheme() {
   });
 }
 
+/* ---------- rentang grafik ---------- */
+function initRange() {
+  const b = $('range');
+  const gambar = () => {
+    b.textContent = RANGE === 'coarse' ? '24 jam' : '1 jam';
+    b.title = RANGE === 'coarse'
+      ? 'grafik memakai lapis kasar: 48 titik jarak 30 menit'
+      : 'grafik memakai lapis halus: 60 titik jarak 1 menit';
+  };
+  gambar();
+  b.addEventListener('click', () => {
+    RANGE = RANGE === 'coarse' ? 'fine' : 'coarse';
+    localStorage.setItem('issboard-range', RANGE);
+    gambar();
+    if (LAST) render(LAST);
+  });
+}
+
 /* ---------- muat ---------- */
 async function tick() {
   // Tab latar tidak perlu meminta apa pun: polling di sana hanya menahan
@@ -462,11 +725,37 @@ async function tick() {
   }
 }
 
+// Riwayat dibaca dari berkas milik agent. Endpoint ini tidak mengumpulkan
+// apa pun — persis pola cache SMART.
+async function tickHistory() {
+  if (document.hidden) return;
+  try {
+    const r = await fetch('api/v1/history', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    HIST = await r.json();
+    if (LAST) render(LAST);
+  } catch (e) {
+    // Riwayat yang gagal dimuat tidak boleh menjatuhkan seluruh halaman:
+    // sisanya tetap berguna, dan kotak sparkline kembali ke keadaan kosong.
+    HIST = { note: 'riwayat gagal dimuat: ' + e.message };
+  }
+}
+
+// Riwayat diambil LEBIH DULU, baru snapshot. Kalau dibalik, gambar pertama
+// selalu menampilkan kotak sparkline kosong sepersekian detik sebelum terisi
+// — kedipan yang tidak perlu, dan di HP terlihat seperti halaman rusak.
+async function boot() {
+  await tickHistory();
+  await tick();
+}
+
 initTheme();
-tick();
+initRange();
+boot();
 setInterval(tick, REFRESH_MS);
+setInterval(tickHistory, HISTORY_MS);
 
 // Kembali terlihat: segarkan segera, jangan tunggu giliran interval berikutnya.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') tick();
+  if (document.visibilityState === 'visible') { tick(); tickHistory(); }
 });

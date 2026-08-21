@@ -161,6 +161,7 @@ supaya tidak perlu dibongkar.
 |---|---|
 | `GET /api/v1/health` | liveness, tanpa mengumpulkan apa pun |
 | `GET /api/v1/status` | snapshot penuh: host, pools, datasets, containers, smart, `verdict`, `findings[]` |
+| `GET /api/v1/history` | riwayat untuk sparkline — MEMBACA berkas milik agent, tidak mengumpulkan apa pun |
 
 **Vonis dihitung di server, bukan di JavaScript.** Aturannya ada di
 `internal/health` supaya pengirim notifikasi (yang tidak punya browser)
@@ -311,7 +312,34 @@ Pemakaian CPU butuh dua cuplikan `/proc/stat`, dan proses yang hidup beberapa
 milidetik tidak punya cuplikan sebelumnya. Cuplikan itu ikut disimpan di berkas
 riwayat — angkanya jadi rata-rata satu menit penuh, bukan hasil tidur 300 ms.
 
-### 9.5 Kredensial
+### 9.5 Sparkline membaca, tidak pernah mengumpulkan
+
+Grafik di tiap kartu dibaca dari `history.json` lewat `GET /api/v1/history`.
+Endpoint itu **hanya membuka berkas** — tidak memanggil `zpool`, tidak
+menyentuh socket container, tidak menulis apa pun. Sama seperti cache SMART,
+dan alasannya juga sama: yang mahal dikerjakan di proses lain yang bertimer.
+
+Digambar tangan sebagai satu `<path>` SVG di `app.js`. Pustaka grafik akan
+melanggar dua janji sekaligus — nol dependensi, dan `default-src 'self'` tanpa
+aset dari luar — demi belasan baris kode yang bisa ditulis langsung.
+
+Tiga aturan menjaga grafiknya tidak mengarang:
+
+1. **Bolong digambar putus.** Riwayat yang hilang karena agent mati atau mesin
+   baru menyala tidak boleh disambung lurus; garis lurus palsu menyembunyikan
+   justru periode yang tidak terpantau.
+2. **Disk tidur tidak punya garis.** Agent tidak mencatat suhu disk standby,
+   dan 0 °C akan terbaca sebagai dingin.
+3. **Sumbu Y punya rentang minimum.** Autoscale murni membuat pergerakan 0,4%
+   tergambar seperti tebing. Dashboard yang bikin panik karena skala, bukan
+   karena data, adalah kebalikan dari gunanya.
+
+Grafik kosong punya dua arti yang jauh berbeda — mesin baru dipasang, atau
+timer agent mati — jadi endpoint-nya mengembalikan `note` dan halaman
+menampilkannya. Agent tidak bisa mengabari bahwa dirinya sendiri berhenti
+jalan; dashboard adalah satu-satunya tempat itu bisa ketahuan.
+
+### 9.6 Kredensial
 
 Token **tidak boleh** masuk `/etc/issboard.yaml`: berkas itu dibaca dashboard
 dan biasanya boleh dibaca siapa saja. Jalurnya `EnvironmentFile` systemd dari
@@ -321,13 +349,11 @@ tidak ada alasan menuliskannya dua kali.
 ## 10. Status & yang belum ada
 
 v1 berjalan dan menyajikan data nyata, dengan tampilan Nothing OS, mode demo,
-dan — sejak fase 2 — notifikasi lewat `issboard-agent` yang terpisah.
+notifikasi lewat `issboard-agent` yang terpisah, dan sparkline riwayat.
 
 Rencana yang sedang berjalan — beserta urutannya — ada di
 [`plan/`](plan/00-index.md). Ringkasnya yang belum:
 
-- **Sparkline** yang mengisi ruang yang sudah disiapkan di kartu, memakai
-  riwayat yang sudah ditulis agent ([`plan/03-sparkline.md`](plan/03-sparkline.md))
 - Perbandingan konfigurasi snapshot (mis. `sanoid.conf`) dengan dataset nyata
 - Panel versi app + deteksi drift antara config dan container yang jalan
 - Fase arsip & unduhan backup

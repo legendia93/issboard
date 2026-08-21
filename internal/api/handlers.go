@@ -12,6 +12,7 @@ import (
 	"github.com/legendia93/issboard/internal/collector"
 	"github.com/legendia93/issboard/internal/config"
 	"github.com/legendia93/issboard/internal/health"
+	"github.com/legendia93/issboard/internal/history"
 )
 
 type Server struct {
@@ -32,6 +33,7 @@ func (s *Server) Routes(static http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/status", s.handleStatus)
+	mux.HandleFunc("GET /api/v1/history", s.handleHistory)
 	mux.Handle("/", static)
 	return s.middleware(mux)
 }
@@ -83,6 +85,44 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Findings: fs,
 		Demo:     s.cfg.Demo,
 	})
+}
+
+// historyResponse menyertakan catatan, bukan cuma titik-titiknya.
+//
+// Grafik kosong punya dua arti yang sangat berbeda — "mesin ini baru dipasang"
+// dan "timer agent-nya mati" — dan tanpa catatan ini keduanya terlihat sama:
+// halaman yang tenang. Itu persis bentuk kebutaan yang dihindari di seluruh
+// proyek ini (design.md §5).
+type historyResponse struct {
+	history.File
+	Note string `json:"note,omitempty"`
+}
+
+// handleHistory MEMBACA berkas yang ditulis issboard-agent. Ia tidak
+// mengumpulkan apa pun dan tidak pernah menulis: persis pola cache SMART.
+//
+// Kalau agent-nya mati, satu-satunya tempat hal itu bisa ketahuan adalah di
+// sini. Agent tidak bisa mengabari bahwa dirinya sendiri berhenti jalan.
+func (s *Server) handleHistory(w http.ResponseWriter, _ *http.Request) {
+	if s.cfg.Demo {
+		writeJSON(w, http.StatusOK, historyResponse{File: history.DemoFile()})
+		return
+	}
+
+	h, err := history.Load(s.cfg.HistoryFile)
+	resp := historyResponse{File: h}
+	switch {
+	case err != nil:
+		resp.Note = "riwayat tidak terbaca: " + err.Error()
+	case h.WrittenAt.IsZero():
+		resp.Note = "belum ada riwayat — apakah issboard-agent.timer sudah aktif?"
+	case time.Since(h.WrittenAt) > 5*time.Minute:
+		// Agent menulis tiap menit. Lebih dari lima menit berarti timernya
+		// mati, dan itu temuan tersendiri — bukan sekadar grafik yang pendek.
+		resp.Note = "riwayat berhenti " + h.WrittenAt.Format("15:04") +
+			" — periksa issboard-agent.timer"
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
