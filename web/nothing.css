@@ -41,15 +41,19 @@
   --font-mono:  ui-monospace, 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
 }
 
-:root[data-theme="dark"],
-:root:not([data-theme="light"]) {
-  color-scheme: light;
-}
+/* 🔴 color-scheme HARUS ikut tema, bukan cuma warna kita sendiri.
+   Ia yang menentukan palet bawaan browser untuk kontrol asli — teks
+   <button>, scrollbar, caret. Versi sebelumnya keliru mengelompokkan
+   [data-theme="dark"] bersama `light`, jadi saat tema gelap dipilih
+   lewat tombol (bukan lewat preferensi sistem), teks tombol dirender
+   memakai palet terang di atas kartu gelap dan HILANG sama sekali —
+   begitu juga scrollbar, yang jadi pita putih menyilaukan. */
+:root { color-scheme: light; }
+
+:root[data-theme="dark"] { color-scheme: dark; }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-  }
+  :root:not([data-theme="light"]) { color-scheme: dark; }
 }
 
 /* ---------- 3. Token status: "bermasalah itu pekat" ----------
@@ -63,8 +67,18 @@
   --st-crit:  var(--n-accent);
   --st-crit-fill: #FBD7D8;
 
-  /* Kartu hero adalah kebalikan halaman: hitam saat light, putih saat
-     dark. Nada statusnya ikut berbalik, jadi disimpan terpisah. */
+  /* Kartu hero SELALU gelap, di kedua tema — dan itu bukan kelalaian.
+     Saat light ia kebalikan halaman, jadi menonjol tanpa menyilaukan.
+     Saat dark, membaliknya jadi putih menghasilkan bidang terang besar di
+     layar yang gelap; diuji langsung di HP dan hasilnya menyakitkan mata,
+     padahal halaman ini paling sering dibuka malam hari dari HP. Silau
+     hanya berjalan satu arah, jadi pembalikannya juga cuma satu arah.
+
+     Nada statusnya disimpan terpisah karena kontrasnya diukur terhadap
+     kartu, bukan terhadap halaman. */
+  --card-black-bg:   var(--n-ink);
+  --card-black-ink:  var(--n-bg);
+  --card-black-line: var(--n-ink);
   --card-black-accent: #FF2A34;
   --card-black-warn:   #FFB020;
 }
@@ -116,8 +130,14 @@
 
     /* Kartu hero terbalik jadi PUTIH di dark, jadi nada merahnya ikut
        berbalik: di sini yang kontras justru merah light-mode. */
-    --card-black-accent: #D71921;
-    --card-black-warn:   #B26A00;
+    /* Sedikit lebih terang dari kartu biasa (#161616), bukan putih:
+       bedanya cukup untuk menonjol, tidak cukup untuk menyilaukan. */
+    --card-black-bg:   #1C1C1C;
+    --card-black-ink:  #F4F4F4;
+    --card-black-line: #3A3A3A;
+    /* Kartunya gelap sekarang, jadi nada terang yang justru terbaca. */
+    --card-black-accent: #FF2A34;
+    --card-black-warn:   #FFB020;
   }
 }
 
@@ -144,8 +164,11 @@
   --p-lav-fill:  #3E3663;  --p-lav-line:  #C0B4FF;
   --p-teal-fill: #234E4E;  --p-teal-line: #2DD4D4;
 
-  --card-black-accent: #D71921;
-  --card-black-warn:   #B26A00;
+  --card-black-bg:   #1C1C1C;
+  --card-black-ink:  #F4F4F4;
+  --card-black-line: #3A3A3A;
+  --card-black-accent: #FF2A34;
+  --card-black-warn:   #FFB020;
 }
 
 /* ---------- 6. Base ---------- */
@@ -208,15 +231,14 @@ body {
   min-width: 0;                /* supaya isi panjang bisa menyusut, bukan meluber */
 }
 
-.n-card-black {                /* hitam di light, putih di dark */
-  background: var(--n-ink);
-  color: var(--n-bg);
-  border-color: var(--n-ink);
+.n-card-black {                /* gelap di kedua tema — lihat catatan token */
+  background: var(--card-black-bg);
+  color: var(--card-black-ink);
+  border-color: var(--card-black-line);
 }
-.n-card-black .n-label { color: var(--n-bg); opacity: .55; }
-/* Merah light-mode cuma 3.8:1 di atas kartu hitam; merah dark-mode cuma
-   3.3:1 di atas kartu putih. Jadi kartu ini memakai nada yang berlawanan
-   dengan halamannya, bukan satu warna untuk dua latar. */
+.n-card-black .n-label { color: var(--card-black-ink); opacity: .55; }
+/* Kontras nada status diukur terhadap KARTUNYA, bukan terhadap halaman —
+   karena itu tokennya terpisah dan tidak ikut berubah bersama tema. */
 .n-card-black { --n-accent: var(--card-black-accent); --st-warn: var(--card-black-warn); }
 
 /* ---------- 9. Pill / badge ---------- */
@@ -234,7 +256,7 @@ body {
 }
 .n-pill-warn { color: var(--st-warn); border-color: var(--st-warn); background: var(--st-warn-fill); }
 .n-pill-crit { color: var(--st-crit); border-color: var(--st-crit); background: var(--st-crit-fill); }
-.n-card-black .n-pill { color: var(--n-bg); border-color: rgba(244,244,244,.35); }
+.n-card-black .n-pill { color: var(--card-black-ink); border-color: rgba(160,160,160,.4); }
 
 /* ---------- 10. Dot status ---------- */
 .n-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
@@ -246,6 +268,12 @@ body {
 /* ---------- 11. Tombol ---------- */
 .n-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  /* Lepas dari widget native. Tanpa ini tombolnya masih digambar tema GTK/OS,
+     yang di sebagian tema menggambar labelnya sendiri memakai warna tema itu —
+     bukan warna di sini — sehingga teks tombol bisa hilang di atas kartu gelap.
+     Latar dan garisnya sudah kita atur sendiri, jadi tidak ada yang hilang. */
+  -webkit-appearance: none;
+  appearance: none;
   font-family: var(--font-mono);
   font-size: 10px; font-weight: 500;
   text-transform: uppercase; letter-spacing: 0.12em;

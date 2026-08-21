@@ -12,6 +12,41 @@
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px 16px 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+}
+
+/* ---------- Rail: vonis + daftar temuan ----------
+   Di layar lebar, isi halaman terkunci di kolom tengah dan sisi kanannya
+   menganggur. Vonis dipindah ke situ dan dibuat MENEMPEL saat scroll:
+   sebelumnya, satu-satunya jawaban atas "ada yang perlu diurus?" menggulung
+   hilang begitu Anda mulai membaca kartu — padahal itu pertanyaan yang
+   membuat halaman ini dibuka.
+
+   Di bawah 1180px semuanya kembali satu kolom dan vonis balik ke atas.
+   Urutan DOM sengaja rail-dulu supaya di HP ia tetap yang pertama terbaca;
+   di desktop penempatannya diatur eksplisit lewat grid, bukan lewat urutan. */
+@media (min-width: 1180px) {
+  .page {
+    max-width: 1440px;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    column-gap: 24px;
+  }
+  .top, .foot, #errors { grid-column: 1 / -1; }
+  .main { grid-column: 1; grid-row: 2; }
+  .rail {
+    grid-column: 2;
+    grid-row: 2;
+    position: sticky;
+    top: 20px;
+    align-self: start;
+    /* Temuan bisa banyak; rail tidak boleh lebih tinggi dari layar, kalau
+       tidak bagian bawahnya tidak akan pernah bisa dilihat. */
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+  .rail .hero { margin-bottom: 12px; }
 }
 
 /* ---------- Header ---------- */
@@ -52,20 +87,23 @@
   line-height: 1.7;
 }
 
-/* ---------- Kartu hero ---------- */
-.hero { padding: 22px 24px 20px; }
+/* ---------- Kartu hero ----------
+   Dikecilkan setelah dilihat di layar penuh: versi sebelumnya memakai pita
+   setinggi ~220px untuk menyampaikan dua angka, dan ruang kosong sebesar itu
+   membuat halamannya terasa melompong, bukan tenang. */
+.hero { padding: 16px 18px 14px; }
 
-.verdict { margin: 12px 0 0; }
+.verdict { margin: 8px 0 0; }
 
 /* Angka besar, kata kecil. Angkanya memakai mono, bukan dot-matrix —
    lihat aturan tipografi di nothing.css. */
-.vrow { display: flex; align-items: baseline; gap: 14px; margin-top: 6px; }
+.vrow { display: flex; align-items: baseline; gap: 12px; margin-top: 4px; }
 
 .vnum {
   font-family: var(--font-mono);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  font-size: clamp(38px, 11vw, 58px);
+  font-size: clamp(30px, 8vw, 40px);
   line-height: 1;
   letter-spacing: -0.03em;
   min-width: 1.1em;
@@ -76,12 +114,12 @@
 .vtext { font-size: 14px; opacity: .82; margin: 0; }
 
 .vok {
-  font-size: clamp(34px, 9vw, 50px);
-  margin: 0 0 8px;
+  font-size: clamp(28px, 7vw, 38px);
+  margin: 0 0 6px;
   line-height: 1;
 }
 
-.findings { list-style: none; margin: 18px 0 0; padding: 0; }
+.findings { list-style: none; margin: 14px 0 0; padding: 0; }
 .findings li {
   display: flex;
   gap: 10px;
@@ -91,9 +129,11 @@
   font-size: 13px;
   line-height: 1.45;
 }
+.findings li:first-child { border-top: 0; }
 .findings .n-dot { margin-top: 6px; }
-.findings b { font-weight: 600; }
-.findings span { opacity: .72; }
+.findings .fbody { min-width: 0; }
+.findings b { font-weight: 600; display: block; }
+.findings span { opacity: .72; display: block; margin-top: 2px; overflow-wrap: anywhere; }
 .findings .more { opacity: .6; font-size: 12px; border-top-style: dashed; }
 
 /* ---------- Bento ---------- */
@@ -192,12 +232,25 @@
 }
 
 /* ---------- Baris daftar (container, dataset) ---------- */
-.rows { display: flex; flex-direction: column; }
-.row {
+/* Kolomnya didefinisikan SEKALI di induknya, lalu tiap baris meminjamnya
+   lewat subgrid.
+
+   Sebelumnya tiap .row adalah grid-nya sendiri, jadi lebar kolom diselesaikan
+   per baris — dan karena kolom terakhir `auto` menyesuaikan panjang chip yang
+   berbeda tiap baris, kolom tengah mulai di posisi yang berbeda-beda. Hasilnya
+   tepi yang bergerigi di daftar container maupun dataset. Baris tetap punya
+   kotaknya sendiri (bukan `display: contents`) supaya garis pemisah dan
+   padding-nya tetap bekerja. */
+.rows {
   display: grid;
   grid-template-columns: 14px minmax(0,1.1fr) minmax(0,1fr) auto;
+  column-gap: 10px;
+}
+.row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 10px;
   padding: 11px 0;
   border-top: 1px solid var(--n-line);
   font-size: 13px;
@@ -248,14 +301,36 @@
 .metric-label[aria-expanded="true"]::after { content: '×'; border-color: var(--n-ink-soft); }
 .metric-label:hover::after { border-color: var(--n-ink); color: var(--n-ink); }
 
+/* ---------- Pita penjelasan metrik ----------
+   SATU pita selebar seluruh grid, di bawah semua metrik — bukan teks di dalam
+   kolom metriknya sendiri.
+
+   Versi sebelumnya menaruh penjelasan di dalam kolom yang lebarnya cuma
+   ~132px, jadi paragraf sepanjang penjelasan ARC berubah jadi pita teks
+   sempit yang memanjang ratusan piksel ke bawah dan menarik seluruh kartu
+   host ikut memanjang. Penjelasan yang membuat halamannya jadi sulit dibaca
+   adalah penjelasan yang gagal. */
 .hint {
-  margin: 10px 0 0;
-  padding-left: 10px;
-  border-left: 2px solid var(--n-line);
-  font-size: 11.5px;
-  line-height: 1.6;
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  padding: 14px 16px;
+  border-radius: var(--n-radius-sm);
+  background: var(--n-surface-2);
+  border: 1px solid var(--n-line);
+  font-size: 12.5px;
+  line-height: 1.65;
   color: var(--n-ink-soft);
 }
+.hint h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--n-ink);
+}
+.hint p { margin: 0; }
 .metric .stat { margin-top: 8px; font-size: 26px; }
 .metric .bar { margin-top: 10px; }
 .metric .spark { height: 26px; margin-top: 10px; }
@@ -292,7 +367,7 @@
    "0.0.0.0:5432->5432/tcp" yang tidak boleh dipenggal memaksa kolom itu
    melebar sampai keluar kartu. */
 @media (max-width: 560px) {
-  .row { grid-template-columns: 14px minmax(0, 1fr); }
+  .rows { grid-template-columns: 14px minmax(0, 1fr); }
   .row .rmeta,
   .row .rtail { grid-column: 2 / -1; }
   .row .rtail { justify-content: flex-start; margin-top: 4px; }

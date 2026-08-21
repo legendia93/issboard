@@ -325,6 +325,7 @@ function render(d) {
 
   renderHeader(d);
   renderHero(d);
+  renderFindings(d.findings);
   renderHost(d.host, d.system);
   renderPools(d.pools, worst);
   renderDisks(d.smart, worst);
@@ -388,27 +389,56 @@ function renderHero(d) {
   if (v.warn) out.append(baris(v.warn, 'perlu diperiksa', 'warn'));
 }
 
+/* Daftar temuan — jawaban atas angka besar di kartu vonis.
+   Sampai sekarang `findings[]` cuma dipakai menyalakan titik status di tiap
+   kartu, jadi "6 perlu ditangani sekarang" tidak pernah bisa dijawab tanpa
+   menyisir seluruh halaman sendiri. Di layar lebar daftar ini menempel di
+   rail, jadi jawabannya ikut saat Anda menggulung. */
+const FINDINGS_MAX = 8;
+
+function renderFindings(fs) {
+  const kartu = $('findings-card');
+  const daftar = $('findings');
+  clear(daftar);
+
+  const semua = fs || [];
+  kartu.hidden = semua.length === 0;
+  if (!semua.length) return;
+
+  for (const f of semua.slice(0, FINDINGS_MAX)) {
+    daftar.append(el('li', {},
+      statusDot(f.level),
+      el('div', { class: 'fbody' },
+        el('b', {}, f.title),
+        el('span', {}, f.detail))));
+  }
+  // Sisanya disebut jumlahnya, tidak dibuang diam-diam: daftar yang dipotong
+  // tanpa keterangan membuat orang mengira itu semuanya.
+  if (semua.length > FINDINGS_MAX) {
+    daftar.append(el('li', { class: 'more' },
+      `+ ${semua.length - FINDINGS_MAX} temuan lagi — ada di kartunya masing-masing`));
+  }
+}
+
 // Satu blok metrik di dalam kartu host. `sp` adalah spesifikasi sparkline
 // ({k: 'cpu'} dan seterusnya); ruangnya sudah berukuran tetap sejak fase 1,
 // jadi grafiknya mengisi tanpa menggeser apa pun. Metrik yang memang tidak
 // punya riwayat — uptime — tidak memesan ruang sama sekali.
-function metric(label, value, unit, sub, extra, sp, help) {
+//
+// Penjelasannya TIDAK ditaruh di sini. Kolom metrik lebarnya cuma ~132px, dan
+// paragraf sepanjang penjelasan ARC di dalamnya berubah jadi pita teks sempit
+// yang menarik seluruh kartu host memanjang ke bawah. `daftar` mendaftarkannya
+// ke satu pita selebar grid — lihat penjelas() di bawah.
+function metric(label, value, unit, sub, extra, sp, help, daftar) {
   // Label bisa diketuk untuk membuka penjelasan. Sengaja BUKAN atribut title:
   // tooltip hover tidak ada di layar sentuh, dan halaman ini paling sering
   // dibuka dari HP. Nama indikator seperti "ARC" tidak menjelaskan dirinya
   // sendiri, dan menebak-nebak arti angka lebih buruk daripada tidak melihat.
-  const hint = help ? el('p', { class: 'hint', hidden: 'hidden' }, help) : null;
   const head = help
     ? el('button', { class: 'n-label metric-label', type: 'button', 'aria-expanded': 'false' }, label)
     : el('span', { class: 'n-label' }, label);
 
-  if (help) {
-    head.addEventListener('click', () => {
-      const buka = hint.hasAttribute('hidden');
-      if (buka) hint.removeAttribute('hidden'); else hint.setAttribute('hidden', 'hidden');
-      head.setAttribute('aria-expanded', String(buka));
-    });
-  }
+  if (help && daftar) daftar(head, label, help);
 
   return el('div', { class: 'metric' },
     head,
@@ -416,8 +446,57 @@ function metric(label, value, unit, sub, extra, sp, help) {
       value, unit ? el('span', { class: 'unit' }, unit) : null),
     extra || null,
     sub ? el('div', { class: 'sub' }, sub) : null,
-    sp ? spark(sp) : null,
-    hint);
+    sp ? spark(sp) : null);
+}
+
+/* Penjelasan metrik yang sedang terbuka, disimpan lintas render.
+   Halaman menggambar ulang tiap 15 detik; tanpa ini, penjelasan yang sedang
+   dibaca akan tertutup sendiri di tengah kalimat. */
+let HINT_AKTIF = '';
+
+/* penjelas() membuat SATU pita selebar seluruh grid metrik, plus fungsi untuk
+   mendaftarkan tiap label ke situ.
+   Hanya satu penjelasan terbuka pada satu waktu: membuka yang kedua menutup
+   yang pertama, jadi kartunya tidak pernah tumbuh dua kali. */
+function penjelas() {
+  const judul = el('h3', {});
+  const isi = el('p', {});
+  const pita = el('div', { class: 'hint', hidden: 'hidden' }, judul, isi);
+  const tombol = new Map();
+
+  const tutupSemua = () => {
+    for (const [, t] of tombol) t.btn.setAttribute('aria-expanded', 'false');
+  };
+
+  const buka = (label) => {
+    const t = tombol.get(label);
+    if (!t) return;
+    tutupSemua();
+    judul.textContent = label;
+    isi.textContent = t.help;
+    pita.hidden = false;
+    t.btn.setAttribute('aria-expanded', 'true');
+    HINT_AKTIF = label;
+  };
+
+  const tutup = () => {
+    tutupSemua();
+    pita.hidden = true;
+    HINT_AKTIF = '';
+  };
+
+  return {
+    pita,
+    daftar(btn, label, help) {
+      tombol.set(label, { btn, help });
+      btn.addEventListener('click', () => (HINT_AKTIF === label ? tutup() : buka(label)));
+    },
+    // Dipanggil setelah grid selesai dibangun, untuk memulihkan penjelasan
+    // yang sedang dibuka sebelum halaman digambar ulang.
+    pulihkan() {
+      if (HINT_AKTIF) buka(HINT_AKTIF);
+    },
+  };
 }
 
 function bar(fraction, level, style) {
@@ -454,26 +533,27 @@ function renderHost(h, sys) {
   const swapUsed = h.swap_total_bytes - h.swap_free_bytes;
   const up = uptimeParts(h.uptime_seconds);
 
+  const jelas = penjelas();
   const grid = el('div', { class: 'metrics' },
 
     // -1 berarti belum ada dua cuplikan /proc/stat untuk dibandingkan, bukan
     // 0% terpakai. Ditulis "—" supaya tidak terbaca sebagai mesin menganggur.
     h.cpu_percent < 0
-      ? metric('cpu', '—', '', 'butuh dua pembacaan untuk dihitung', null, { k: 'cpu' }, HELP.cpu)
+      ? metric('cpu', '—', '', 'butuh dua pembacaan untuk dihitung', null, { k: 'cpu' }, HELP.cpu, jelas.daftar)
       : metric('cpu', Math.round(h.cpu_percent), '%',
         sys && sys.cpu_cores ? `${sys.cpu_cores} core` : null,
-        bar(h.cpu_percent, h.cpu_percent >= 90 ? 'crit' : 'ok', pastelFor('cpu')), { k: 'cpu' }, HELP.cpu),
+        bar(h.cpu_percent, h.cpu_percent >= 90 ? 'crit' : 'ok', pastelFor('cpu')), { k: 'cpu' }, HELP.cpu, jelas.daftar),
 
     metric('memori', memPct, '%',
       `${bytes(memUsed)} dari ${bytes(h.mem_total_bytes)}`,
-      bar(memPct, memPct >= 90 ? 'crit' : memPct >= 80 ? 'warn' : 'ok', pastelFor('mem')), { k: 'mem' }, HELP.mem),
+      bar(memPct, memPct >= 90 ? 'crit' : memPct >= 80 ? 'warn' : 'ok', pastelFor('mem')), { k: 'mem' }, HELP.mem, jelas.daftar),
 
     // ARC penuh itu normal dan justru diinginkan — ZFS memang memakai RAM
     // yang menganggur sebagai cache. Bar ini tidak pernah jadi warna pekat:
     // ia informasi, bukan peringatan.
     metric('arc zfs', bytes(h.arc_size_bytes), '',
       `${arcPct}% dari batas · hit ${h.arc_hit_ratio.toFixed(1)}%`,
-      bar(arcPct, 'ok', pastelFor('arc')), { k: 'arc' }, HELP.arc),
+      bar(arcPct, 'ok', pastelFor('arc')), { k: 'arc' }, HELP.arc, jelas.daftar),
 
     // Swap yang terpakai penting justru saat RAM terlihat lega: mesin itu
     // sedang menukar kecepatan dengan diam-diam.
@@ -481,18 +561,23 @@ function renderHost(h, sys) {
       ? metric('swap', bytes(swapUsed), '',
         `dari ${bytes(h.swap_total_bytes)}`,
         bar(pct(swapUsed, h.swap_total_bytes),
-          pct(swapUsed, h.swap_total_bytes) >= 50 ? 'warn' : 'ok', pastelFor('swap')), { k: 'swap' }, HELP.swap)
+          pct(swapUsed, h.swap_total_bytes) >= 50 ? 'warn' : 'ok', pastelFor('swap')), { k: 'swap' }, HELP.swap, jelas.daftar)
       : metric('swap', '—', '', 'tidak ada swap', null, false, HELP.swap),
 
     // Load average BUKAN persen: 4,0 di mesin 8 core berarti setengah beban.
     // Karena itu tidak diberi bar — bar menyiratkan skala 0–100 yang keliru.
     metric('load 1m', h.load1.toFixed(2), '',
       `5m ${h.load5.toFixed(2)} · 15m ${h.load15.toFixed(2)}`
-      + (sys && sys.cpu_cores ? ` · dari ${sys.cpu_cores} core` : ''), null, { k: 'load1' }, HELP.load),
+      + (sys && sys.cpu_cores ? ` · dari ${sys.cpu_cores} core` : ''), null, { k: 'load1' }, HELP.load, jelas.daftar),
 
-    metric('uptime', up[0], up[1], 'sejak boot terakhir', null, null, HELP.uptime));
+    metric('uptime', up[0], up[1], 'sejak boot terakhir', null, null, HELP.uptime, jelas.daftar),
+
+    // Pita penjelasan menutup grid: selebar seluruh kolom, jadi kartunya
+    // tidak pernah memanjang karena satu kolom sempit kebanjiran teks.
+    jelas.pita);
 
   box.append(el('div', { class: 'n-card' }, grid, systemDetails(sys, h)));
+  jelas.pulihkan();
 }
 
 // Identitas mesin, dilipat di dalam kartu host. Jarang berubah, jadi tidak

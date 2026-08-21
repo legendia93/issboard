@@ -26,13 +26,22 @@
     </div>
   </header>
 
-  <!-- Kartu hero: satu jawaban untuk pertanyaan yang sebenarnya dicari
-       saat halaman ini dibuka sambil lewat — ada yang perlu diurus atau tidak. -->
-  <section id="hero" class="n-card n-card-black hero n-fade-in">
-    <span class="n-label">status host</span>
-    <div id="verdict" class="verdict"><p class="vtext">memuat…</p></div>
-    <ul id="findings" class="findings"></ul>
-  </section>
+  <!-- Rail: satu jawaban untuk pertanyaan yang sebenarnya dicari saat halaman
+       ini dibuka sambil lewat — ada yang perlu diurus atau tidak, dan apa
+       saja. Ditulis SEBELUM .main supaya di HP ia yang pertama terbaca; di
+       layar lebar ia pindah ke kolom kanan dan menempel saat scroll. -->
+  <aside class="rail">
+    <section id="hero" class="n-card n-card-black hero n-fade-in">
+      <span class="n-label">status host</span>
+      <div id="verdict" class="verdict"><p class="vtext">memuat…</p></div>
+    </section>
+    <section id="findings-card" class="n-card" hidden>
+      <span class="n-label">yang perlu diurus</span>
+      <ul id="findings" class="findings"></ul>
+    </section>
+  </aside>
+
+  <div class="main">
 
   <!-- Satu kartu, bukan lima. Metrik host saling menjelaskan — CPU tinggi
        bersama swap terisi bercerita lain daripada CPU tinggi sendirian —
@@ -53,6 +62,8 @@
 
   <h2 class="n-label section">dataset</h2>
   <div id="datasets" class="bento bento-wide"></div>
+
+  </div><!-- /.main -->
 
   <p id="errors" class="note" hidden></p>
 

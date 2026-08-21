@@ -69,6 +69,45 @@ persis hal yang `.gitignore` repo ini susah payah jaga.
 - **Metrik sistem ditambahkan** meniru dashboard `lookna`: CPU%, swap, distro,
   kernel, arsitektur, model & jumlah core CPU, suhu CPU.
 
+## Putaran revisi kedua — setelah dilihat di layar penuh
+
+Fase 1 digarap dengan HP sebagai patokan. Saat akhirnya dilihat di layar
+lebar dan dalam tema gelap, empat hal langsung terasa salah:
+
+- **Ruang kanan menganggur, dan vonisnya menggulung hilang.** Isi halaman
+  terkunci di kolom tengah selebar 1200px, sisanya kosong. Sekarang ada
+  **rail** di kanan pada layar ≥1180px: vonis + daftar temuan, menempel saat
+  scroll. Sebelumnya satu-satunya jawaban atas "ada yang perlu diurus?"
+  hilang dari layar begitu Anda mulai membaca kartu.
+- **`findings[]` ternyata tidak pernah ditampilkan.** `<ul id="findings">`
+  sudah ada di HTML sejak fase 1 tapi tidak pernah diisi JavaScript — jadi
+  angka "6 perlu ditangani sekarang" tidak bisa dijawab tanpa menyisir
+  seluruh halaman sendiri. Sekarang daftarnya ada di rail.
+- **Kartu hero terlalu besar, dan di tema gelap menyilaukan.** Ia memakai
+  pita setinggi ~220px untuk dua angka, dan pembalikan warnanya berarti
+  bidang putih besar di layar gelap. Sekarang lebih ringkas, dan
+  **pembalikannya cuma satu arah**: hitam di tema terang, tetap gelap di
+  tema gelap. Silau hanya berjalan satu arah.
+- **Penjelasan metrik menumpuk di kolomnya sendiri.** Kolom metrik lebarnya
+  ~132px, jadi penjelasan ARC berubah jadi pita teks sempit sepanjang
+  ratusan piksel dan menarik seluruh kartu host memanjang. Sekarang satu
+  pita selebar seluruh grid, dan hanya satu penjelasan terbuka pada satu
+  waktu.
+
+Dua bug lama ikut ketahuan saat mengerjakannya:
+
+1. **Baris daftar tidak pernah bisa sejajar.** `.rows` itu flex dan tiap
+   baris grid-nya sendiri, jadi lebar kolom diselesaikan per baris — dan
+   karena kolom terakhir menyesuaikan panjang chip yang berbeda tiap baris,
+   kolom tengah mulai di posisi berbeda-beda. Sekarang kolomnya
+   didefinisikan sekali di induk dan dipinjam tiap baris lewat `subgrid`.
+2. **`color-scheme` tidak ikut tema pilihan.** `[data-theme="dark"]` justru
+   dikelompokkan bersama `light`, jadi saat tema gelap dipilih lewat tombol
+   (bukan lewat preferensi sistem), kontrol asli browser — scrollbar, caret —
+   memakai palet terang. Sekalian: `.n-btn` sekarang `appearance: none`,
+   karena tombol yang masih memakai widget native dilabeli oleh tema OS,
+   bukan oleh CSS di sini, dan di sebagian tema teksnya hilang.
+
 ## Yang ditemukan saat mengerjakan
 
 Dua hal yang tidak terduga, keduanya sudah diperbaiki dan dicatat di

@@ -188,7 +188,29 @@ karena dashboard yang berkedip melelahkan dan membuang daya HP.
 remote dari HP, jadi satu kolom adalah keadaan normal, bukan kasus tepi yang
 ditambal di ujung berkas CSS.
 
-### 7.1 "Sehat itu pastel, bermasalah itu pekat"
+### 7.1 Vonis di rail, dan pembalikan warna yang cuma satu arah
+
+Di layar ≥1180px, vonis dan daftar temuan pindah ke **rail** di kanan yang
+menempel saat scroll. Dua alasan, dan yang kedua yang membuatnya bukan sekadar
+mengisi ruang kosong:
+
+1. Isi halaman terkunci di kolom tengah; di monitor lebar sisanya menganggur.
+2. **Vonisnya dulu menggulung hilang.** Satu-satunya jawaban atas "ada yang
+   perlu diurus?" lenyap dari layar begitu orang mulai membaca kartu — padahal
+   itu pertanyaan yang membuat halaman ini dibuka.
+
+Kartu vonisnya **gelap di kedua tema**, dan itu disengaja. Saat tema terang ia
+kebalikan halaman, jadi menonjol tanpa menyilaukan. Saat tema gelap,
+membaliknya jadi putih menghasilkan bidang terang besar di layar yang gelap —
+diuji di HP dan hasilnya menyakitkan mata, padahal halaman ini paling sering
+dibuka malam hari dari HP. **Silau hanya berjalan satu arah, jadi
+pembalikannya juga cuma satu arah.**
+
+Daftar temuan di rail juga menutup lubang lama: `findings[]` sudah dihitung
+server sejak awal, tapi tidak pernah ditampilkan di mana pun. Angka besar di
+kartu vonis tidak bisa dijawab tanpa menyisir seluruh halaman sendiri.
+
+### 7.2 "Sehat itu pastel, bermasalah itu pekat"
 
 Pastel dipakai sebagai **identitas data** — menandai *pool yang mana*, bukan
 *sehat atau tidak*. Status memakai warna pekat, dan hanya saat ada masalah.
@@ -200,7 +222,7 @@ Konsekuensi yang mengikat: **palet pastel tidak boleh memuat kuning, oranye,
 atau merah.** Warna itu sudah punya arti. Butter pastel sempat dipakai, dan bar
 memori 67% yang sehat langsung terbaca seperti peringatan.
 
-### 7.2 Angka tidak pernah memakai font dot-matrix
+### 7.3 Angka tidak pernah memakai font dot-matrix
 
 Font dot-matrix adalah tanda tangan Nothing OS, dan menggoda untuk dipakai di
 angka besar. Tapi diuji: pada font itu, **`52` terbaca `92`, `35` terbaca `39`,
@@ -210,13 +232,13 @@ Salah membaca suhu disk 52°C sebagai 92°C persis jenis kesalahan yang dashboar
 ini ada untuk mencegahnya. Jadi aturannya: **font dot untuk kata, mono untuk
 angka.**
 
-### 7.3 Mode demo
+### 7.4 Mode demo
 
 `-demo` menyajikan data palsu dan tidak menyentuh sistem sama sekali. Dua
 alasan, dan yang kedua yang membuatnya dikerjakan bersamaan dengan UI:
 
 1. Tampilan kondisi sakit mustahil digarap kalau harus menunggu disk benar-benar
-   memburuk. Tanpa ini, aturan di 7.1 tidak bisa dilihat hasilnya.
+   memburuk. Tanpa ini, aturan di 7.2 tidak bisa dilihat hasilnya.
 2. Halaman ini menampilkan hostname, alamat IP, nama pool, dan nama app. Mode
    demo membuat screenshot dan rekaman layar aman — persis hal yang `.gitignore`
    repo ini susah payah jaga.
