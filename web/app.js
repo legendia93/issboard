@@ -718,9 +718,13 @@ function renderContainers(cs, worst) {
     if ((c.state || '').toLowerCase() === 'running' && !(c.networks || []).length) {
       tail.push(el('span', { class: 'n-pill n-pill-crit' }, 'tanpa network'));
     }
+    // Chip port ditampilkan netral, TIDAK diwarnai peringatan di sini.
+    // Sebelumnya JavaScript memutuskan sendiri bahwa 0.0.0.0 berarti bahaya —
+    // itu aturan vonis yang bocor ke browser, persis yang dilarang design.md
+    // §6. Yang menentukan bahaya sekarang hanya internal/health, dan hasilnya
+    // sampai ke sini lewat titik status baris ini.
     for (const p of c.published_ports || []) {
-      const terbuka = p.startsWith('0.0.0.0:') || p.startsWith(':::');
-      tail.push(el('span', { class: 'n-pill ' + (terbuka ? 'n-pill-warn' : '') }, p));
+      tail.push(el('span', { class: 'n-pill' }, p));
     }
 
     rows.append(el('div', { class: 'row' },

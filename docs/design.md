@@ -313,6 +313,18 @@ dengan tidak punya alert. Karena itu:
 - **Pesan dipotong** di ~3,5 KB dengan penghitung sisanya. ntfy dan Telegram
   sama-sama menolak badan pesan yang terlalu panjang, dan alert yang gagal
   terkirim karena isinya kebanyakan adalah kegagalan diam.
+- **Aturannya sendiri harus sepi.** Versi pertama menandai setiap port yang
+  ter-publish ke `0.0.0.0`. Di server sungguhan hasilnya 19 dari 25 temuan —
+  padahal mem-publish port justru cara aplikasi web dijangkau; itu tujuannya,
+  bukan kecelakaan. Sekarang yang ditandai hanya layanan yang biasanya
+  mengandalkan jaringan sebagai pembatas alih-alih autentikasinya sendiri
+  (basis data, cache, broker, API Docker). Daftar yang sama itu turun jadi 5,
+  dan kelimanya bisa ditindaklanjuti.
+
+  Pelajarannya lebih umum daripada soal port: **aturan yang menyala untuk
+  keadaan normal melatih orang mengabaikan seluruh daftarnya**, dan sesudah
+  itu temuan yang sungguhan ikut tidak terbaca. Aturan baru harus diuji
+  terhadap mesin yang sehat, bukan cuma terhadap mesin yang sakit.
 
 ### 9.3 Dua aturan yang lahir dari cara ini gagal
 

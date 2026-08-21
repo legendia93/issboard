@@ -52,10 +52,13 @@ func TestParseContainers(t *testing.T) {
 		t.Errorf("port loopback ikut terdaftar: %v", by["web"].PublishedPorts)
 	}
 
-	// 0.0.0.0 dan :: keduanya menjangkau seluruh jaringan.
+	// 🔴 `docker run -p 5432:5432` menghasilkan DUA entri, 0.0.0.0 dan ::,
+	// untuk SATU port yang sama. Menampilkan keduanya menggandakan tiap chip
+	// di UI dan tiap temuan di notifikasi — di server sungguhan itu berarti
+	// belasan temuan kembar. Keduanya dinormalkan jadi "*".
 	db := by["basis-data"]
-	if len(db.PublishedPorts) != 2 {
-		t.Errorf("port 0.0.0.0/:: harus terdaftar, dapat %v", db.PublishedPorts)
+	if len(db.PublishedPorts) != 1 || db.PublishedPorts[0] != "*:5432->5432/tcp" {
+		t.Errorf("port IPv4+IPv6 harus jadi satu entri '*', dapat %v", db.PublishedPorts)
 	}
 
 	// 🔴 Jebakan yang jadi akar insiden monitoring buta: Up, tapi tanpa network.
@@ -87,6 +90,21 @@ func TestHealthFromStatus(t *testing.T) {
 
 // Urutan map di Go acak. Tanpa pengurutan, daftar network dan port berganti
 // urutan tiap refresh dan halaman terlihat berkedip tanpa ada yang berubah.
+// Alamat yang SPESIFIK bukan wildcard: itu keputusan sengaja dan harus
+// terlihat apa adanya, bukan disamarkan jadi "*".
+func TestParseContainersAlamatSpesifikDipertahankan(t *testing.T) {
+	j := `[{"Names":["/x"],"Image":"i","State":"running","Status":"Up 1 day",
+	 "Ports":[{"IP":"10.0.0.5","PrivatePort":80,"PublicPort":8080,"Type":"tcp"}],
+	 "NetworkSettings":{"Networks":{"bridge":{}}}}]`
+	cs, err := parseContainers(strings.NewReader(j))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cs[0].PublishedPorts) != 1 || cs[0].PublishedPorts[0] != "10.0.0.5:8080->80/tcp" {
+		t.Errorf("alamat spesifik berubah: %v", cs[0].PublishedPorts)
+	}
+}
+
 func TestParseContainersUrutanStabil(t *testing.T) {
 	var sebelumnya []string
 	for i := 0; i < 8; i++ {

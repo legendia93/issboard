@@ -103,7 +103,7 @@ func DemoSnapshot() Snapshot {
 				Networks: []string{"jaring-belakang"},
 				// Port database terbuka ke seluruh jaringan — nyaris selalu
 				// tidak disengaja, dan tidak pernah muncul sendiri di layar.
-				PublishedPorts: []string{"0.0.0.0:5432->5432/tcp"}},
+				PublishedPorts: []string{"*:5432->5432/tcp"}},
 			{Name: "pekerja", Image: "demo/worker:0.9", State: "running", Status: "Up 2 hours",
 				// Jebakan mahal: statusnya Up, jadi semuanya terlihat normal.
 				Networks: nil},

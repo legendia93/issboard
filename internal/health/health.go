@@ -9,6 +9,7 @@ package health
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -231,15 +232,85 @@ func evalContainers(cs []collector.Container) []Finding {
 				c.Name + " melaporkan unhealthy", c.Name})
 		}
 
-		for _, p := range c.PublishedPorts {
-			if strings.HasPrefix(p, "0.0.0.0:") || strings.HasPrefix(p, ":::") {
-				f = append(f, Finding{Warn, "ctr.exposed." + c.Name + "." + p,
-					"Port terbuka ke semua alamat",
-					fmt.Sprintf("%s mem-publish %s — terjangkau dari seluruh jaringan, bukan cuma localhost", c.Name, p), c.Name})
-			}
-		}
+		f = append(f, evalPorts(c)...)
 	}
 	return f
+}
+
+// portSensitif adalah layanan yang berbahaya kalau terjangkau dari luar
+// localhost. Daftarnya SENGAJA pendek.
+//
+// Versi pertama menandai SEMUA port yang ter-publish ke 0.0.0.0, dan di server
+// sungguhan hasilnya 19 dari 25 temuan — padahal mem-publish port justru cara
+// aplikasi web dijangkau; itu bukan kecelakaan, itu tujuannya. Aturan yang
+// menyala untuk keadaan normal melatih orang mengabaikan seluruh daftarnya,
+// dan setelah itu temuan yang sungguhan ikut tidak terbaca.
+//
+// Yang tersisa di sini cuma yang biasanya TIDAK punya autentikasi kuat, atau
+// yang kalau tembus berarti seluruh host ikut jatuh. Kalau ada yang kurang
+// atau kelebihan untuk mesin Anda, di sinilah tempat mengubahnya.
+var portSensitif = map[int]struct {
+	nama  string
+	level Level
+}{
+	5432:  {"PostgreSQL", Warn},
+	3306:  {"MySQL/MariaDB", Warn},
+	33060: {"MySQL X Protocol", Warn},
+	1433:  {"SQL Server", Warn},
+	27017: {"MongoDB", Warn},
+	6379:  {"Redis", Warn},
+	11211: {"Memcached", Warn},
+	5984:  {"CouchDB", Warn},
+	9200:  {"Elasticsearch", Warn},
+	9300:  {"Elasticsearch (transport)", Warn},
+	8086:  {"InfluxDB", Warn},
+	5672:  {"RabbitMQ", Warn},
+	2049:  {"NFS", Warn},
+	445:   {"SMB", Warn},
+	3389:  {"RDP", Warn},
+	5900:  {"VNC", Warn},
+	21:    {"FTP", Warn},
+	// Dua ini kritis, bukan sekadar perhatian: API Docker tanpa autentikasi
+	// setara memberi root di host ini kepada siapa pun yang bisa menjangkaunya,
+	// dan Telnet mengirim kata sandi sebagai teks polos.
+	2375:  {"API Docker tanpa TLS", Crit},
+	10250: {"kubelet", Crit},
+	23:    {"Telnet", Crit},
+}
+
+// evalPorts memeriksa port yang ter-publish ke luar localhost. Yang tidak ada
+// di daftar sensitif TIDAK jadi temuan — ia tetap ditampilkan sebagai chip di
+// kartunya, karena melihatnya berguna, tapi melihatnya bukan berarti alarm.
+func evalPorts(c collector.Container) []Finding {
+	var f []Finding
+	for _, p := range c.PublishedPorts {
+		svc, sensitif := portSensitif[publicPort(p)]
+		if !sensitif {
+			continue
+		}
+		f = append(f, Finding{svc.level, "ctr.exposed." + c.Name + "." + p,
+			svc.nama + " terjangkau dari seluruh jaringan",
+			fmt.Sprintf("%s mem-publish %s — layanan seperti ini biasanya mengandalkan "+
+				"jaringan sebagai pembatas, bukan autentikasinya sendiri", c.Name, p), c.Name})
+	}
+	return f
+}
+
+// publicPort mengambil nomor port dari bentuk "alamat:publik->privat/proto".
+func publicPort(s string) int {
+	head, _, ok := strings.Cut(s, "->")
+	if !ok {
+		return 0
+	}
+	i := strings.LastIndex(head, ":")
+	if i < 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(head[i+1:])
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // sortByLevel menaruh kritis di atas tanpa mengacak urutan dalam satu tingkat,

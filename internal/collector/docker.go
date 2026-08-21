@@ -96,7 +96,16 @@ func parseContainers(r io.Reader) ([]Container, error) {
 			if p.PublicPort == 0 || p.IP == "" || p.IP == "127.0.0.1" || p.IP == "::1" {
 				continue
 			}
-			s := fmt.Sprintf("%s:%d->%d/%s", p.IP, p.PublicPort, p.PrivatePort, p.Type)
+			// `docker run -p 3000:3000` menghasilkan DUA entri: 0.0.0.0 dan ::.
+			// Itu satu port yang sama, dipublikasikan di IPv4 dan IPv6 —
+			// menampilkannya dua kali menggandakan tiap chip di UI dan tiap
+			// temuan di notifikasi. Keduanya dinormalkan jadi "*", yang juga
+			// lebih jujur artinya: semua alamat.
+			addr := p.IP
+			if addr == "0.0.0.0" || addr == "::" {
+				addr = "*"
+			}
+			s := fmt.Sprintf("%s:%d->%d/%s", addr, p.PublicPort, p.PrivatePort, p.Type)
 			if !seen[s] {
 				seen[s] = true
 				c.PublishedPorts = append(c.PublishedPorts, s)

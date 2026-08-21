@@ -1,6 +1,7 @@
 package health
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -35,7 +36,7 @@ func TestEvaluateDataDemo(t *testing.T) {
 		"ctr.down.pencadang",     // exited
 		"ctr.nonet.pekerja",      // Up tanpa network
 		"ctr.unhealthy.cache",    // healthcheck gagal
-		"ctr.exposed.basis-data.0.0.0.0:5432->5432/tcp",
+		"ctr.exposed.basis-data.*:5432->5432/tcp",
 	}
 	for _, k := range wajib {
 		if punyaKunci(fs, k) == nil {
@@ -59,6 +60,64 @@ func TestEvaluateDataDemo(t *testing.T) {
 	}
 }
 
+// 🔴 Mem-publish port ke semua alamat adalah cara aplikasi web dijangkau —
+// itu tujuannya, bukan kecelakaan. Aturan yang menyala untuk keadaan normal
+// melatih orang mengabaikan seluruh daftar temuan.
+func TestPortBiasaBukanTemuan(t *testing.T) {
+	s := collector.Snapshot{Containers: []collector.Container{{
+		Name: "web", State: "running", Status: "Up 6 days", Networks: []string{"bridge"},
+		PublishedPorts: []string{
+			"*:3000->3000/tcp", "*:8080->80/tcp", "*:1935->1935/tcp", "*:9443->9443/tcp",
+		},
+	}}}
+	if fs := Evaluate(s); len(fs) != 0 {
+		t.Errorf("port aplikasi biasa tidak boleh jadi temuan: %+v", fs)
+	}
+}
+
+// Yang tersisa di daftar sensitif adalah layanan yang biasanya mengandalkan
+// jaringan sebagai pembatas, bukan autentikasinya sendiri.
+func TestPortSensitifJadiTemuan(t *testing.T) {
+	for _, c := range []struct {
+		port int
+		mau  Level
+	}{
+		{5432, Warn}, {3306, Warn}, {6379, Warn}, {27017, Warn},
+		{2375, Crit}, {23, Crit}, {10250, Crit},
+	} {
+		p := fmt.Sprintf("*:%d->%d/tcp", c.port, c.port)
+		s := collector.Snapshot{Containers: []collector.Container{{
+			Name: "x", State: "running", Status: "Up", Networks: []string{"bridge"},
+			PublishedPorts: []string{p},
+		}}}
+		fs := Evaluate(s)
+		if len(fs) != 1 {
+			t.Errorf("port %d: mau 1 temuan, dapat %+v", c.port, fs)
+			continue
+		}
+		if fs[0].Level != c.mau {
+			t.Errorf("port %d: mau %s, dapat %s", c.port, c.mau, fs[0].Level)
+		}
+	}
+}
+
+func TestPublicPort(t *testing.T) {
+	for _, c := range []struct {
+		in  string
+		mau int
+	}{
+		{"*:5432->5432/tcp", 5432},
+		{"10.0.0.5:8080->80/tcp", 8080},
+		{"*:8890->8890/udp", 8890},
+		{"bukan-port", 0},
+		{"*:abc->80/tcp", 0},
+	} {
+		if got := publicPort(c.in); got != c.mau {
+			t.Errorf("%q: mau %d, dapat %d", c.in, c.mau, got)
+		}
+	}
+}
+
 // Host yang sehat harus benar-benar sunyi. Aturan yang menyala tanpa sebab
 // membuat orang berhenti memercayai vonisnya.
 func TestEvaluateHostSehatSunyi(t *testing.T) {
@@ -72,7 +131,7 @@ func TestEvaluateHostSehatSunyi(t *testing.T) {
 		Containers: []collector.Container{{
 			Name: "web", State: "running", Status: "Up 6 days",
 			Networks: []string{"bridge"}, Health: "healthy",
-			PublishedPorts: []string{"127.0.0.1:8080->80/tcp"},
+			PublishedPorts: []string{"*:8080->80/tcp"},
 		}},
 		Smart: collector.SmartReport{
 			WrittenAt: time.Now(),
