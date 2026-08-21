@@ -128,6 +128,19 @@ case "$1" in configure)
 
   if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
+
+    # 🔴 Hentikan instance yang SEDANG jalan — tapi JANGAN socket-nya.
+    #
+    # issboard socket-activated: upgrade paket mengganti binary di disk, tapi
+    # proses yang terlanjur hidup tetap melayani versi LAMA sampai kebetulan
+    # idle-exit. Kalau ada yang sedang memantau halamannya, idle itu tidak
+    # pernah datang, dan perbaikan yang baru dipasang tidak pernah aktif —
+    # persis yang terjadi saat pemasangan pertama di mesin sungguhan.
+    #
+    # Menghentikan service-nya aman TANPA downtime: socket tetap memegang
+    # port dan mengantre koneksi berikutnya, lalu systemd menyalakan binary
+    # yang baru untuk melayaninya.
+    systemctl stop issboard.service || true
     # 🔴 SOCKET-nya yang di-enable, bukan service-nya. Meng-enable
     # issboard.service membuat daemon yang jalan terus — persis yang
     # dihindari desain ini.

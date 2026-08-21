@@ -95,6 +95,25 @@ karena itu jalur coba-coba yang paling mudah, tapi README harus menyebut:
 - ZFS tidak universal (DKMS di Fedora/RHEL, archzfs di Arch) — sudah aman
   karena kegagalan per-bagian, tapi README jangan berasumsi.
 
+## Yang ketahuan saat dipasang sungguhan
+
+Dua hal yang tidak mungkin muncul di mesin pengembangan, keduanya soal
+pemasangan — bukan soal kode dashboard-nya:
+
+1. **Versi paket dari hash commit tidak berurutan.** `git describe` di repo
+   tanpa tag mengembalikan hash telanjang, dan hash yang kebetulan diawali
+   angka lolos dari penjaga versi. apt memakai versi untuk memutuskan apakah
+   paket berikutnya sebuah upgrade — hash membuat build berikutnya bisa
+   terlihat lebih tua. Sekarang tulang punggungnya jumlah commit.
+
+2. **Upgrade tidak mengganti proses yang sedang jalan.** Socket activation
+   berarti binary di disk boleh berganti sementara proses lama terus
+   melayani sampai idle-exit — dan kalau ada yang sedang memantau
+   halamannya, idle itu tidak pernah datang. Perbaikan yang baru dipasang
+   jadi tidak pernah aktif. `postinst` sekarang menghentikan
+   `issboard.service` (BUKAN socket-nya), jadi koneksi berikutnya dilayani
+   binary baru — tanpa downtime, karena socket-lah yang memegang port.
+
 ## Yang belum diuji
 
 Dikumpulkan lengkap di [`../distro.md`](../distro.md), diringkas di sini:
