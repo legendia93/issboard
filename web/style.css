@@ -119,6 +119,27 @@
   line-height: 1;
 }
 
+/* Kartu temuan yang bisa dilipat. Mengikuti pola "informasi sistem":
+   penanda +/- sendiri, bukan segitiga bawaan browser yang tidak nyambung
+   dengan tema ini. */
+.findings-card summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.findings-card summary::-webkit-details-marker { display: none; }
+.findings-card summary::before { content: '– '; }
+.findings-card:not([open]) summary::before { content: '+ '; }
+.findings-card summary:hover { color: var(--n-ink); }
+.fcount {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  opacity: .7;
+}
+
 .findings { list-style: none; margin: 14px 0 0; padding: 0; }
 .findings li {
   display: flex;

@@ -403,6 +403,9 @@ function renderFindings(fs) {
 
   const semua = fs || [];
   kartu.hidden = semua.length === 0;
+  // Jumlahnya ditulis di ringkasan, jadi kartu yang dilipat tetap memberi
+  // tahu ada berapa — melipat menyembunyikan rinciannya, bukan kabarnya.
+  $('findings-count').textContent = semua.length ? `(${semua.length})` : '';
   if (!semua.length) return;
 
   for (const f of semua.slice(0, FINDINGS_MAX)) {
@@ -764,6 +767,17 @@ function renderErrors(d) {
   if (errs.length) box.append('Catatan pengumpulan: ' + errs.join(' · '));
 }
 
+/* Lipatan kartu temuan diingat antar kunjungan, sama seperti tema.
+   Dipasang sekali di awal; <details> adalah elemen statis di HTML, jadi
+   keadaannya selamat dari gambar ulang tiap 15 detik. */
+function initFindingsFold() {
+  const kartu = $('findings-card');
+  if (localStorage.getItem('issboard-findings') === 'tutup') kartu.open = false;
+  kartu.addEventListener('toggle', () => {
+    localStorage.setItem('issboard-findings', kartu.open ? 'buka' : 'tutup');
+  });
+}
+
 /* ---------- tema ---------- */
 function initTheme() {
   const saved = localStorage.getItem('issboard-theme');
@@ -836,6 +850,7 @@ async function boot() {
 
 initTheme();
 initRange();
+initFindingsFold();
 boot();
 setInterval(tick, REFRESH_MS);
 setInterval(tickHistory, HISTORY_MS);
