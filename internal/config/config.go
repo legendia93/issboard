@@ -176,6 +176,11 @@ func (c *Config) applyEnv() {
 		key string
 		dst *string
 	}{
+		// Di dalam container tidak ada berkas config yang enak disunting, dan
+		// alamat bawaan 127.0.0.1 membuat prosesnya tak terjangkau dari luar
+		// namespace-nya sendiri. Ini satu-satunya alasan alamat bisa diatur
+		// lewat lingkungan — bukan supaya dashboard ini ditaruh di LAN.
+		{"ISSBOARD_LISTEN", &c.Listen},
 		{"ISSBOARD_NTFY_URL", &c.NtfyURL},
 		{"ISSBOARD_NTFY_TOPIC", &c.NtfyTopic},
 		{"ISSBOARD_NTFY_TOKEN", &c.NtfyToken},

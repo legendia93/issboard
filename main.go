@@ -55,7 +55,22 @@ func main() {
 		log.Printf("issboard: listen sendiri di %s", ln.Addr())
 	}
 
-	idle := newIdleTimer(cfg.IdleTimeout)
+	// 🔴 Idle-exit HANYA masuk akal di bawah socket activation.
+	//
+	// Tanpa systemd yang memegang socket, tidak ada apa pun yang menyalakan
+	// proses ini lagi setelah ia keluar — dashboard-nya mati diam-diam dan
+	// baru ketahuan saat dibuka. Di Alpine, Void, atau saat `go run` dipakai
+	// untuk mengembangkan, itu bukan hemat sumber daya, itu kegagalan.
+	//
+	// Jadi timernya dinonaktifkan sendiri, bukan diserahkan ke pengguna untuk
+	// mengingat menulis `idle_timeout: 0` di config.
+	idleFor := cfg.IdleTimeout
+	if !activated && idleFor > 0 {
+		log.Printf("issboard: tanpa socket activation, idle_timeout %s diabaikan — "+
+			"tidak ada yang akan menyalakan ulang kalau prosesnya keluar", idleFor)
+		idleFor = 0
+	}
+	idle := newIdleTimer(idleFor)
 
 	// Saat menggarap tampilan, berkas ter-embed berarti tiap perubahan CSS
 	// butuh compile ulang. Flag ini melayaninya dari disk supaya cukup
@@ -87,7 +102,7 @@ func main() {
 		case <-idle.expired():
 			// Ini jalur normal, bukan kegagalan: systemd akan menyalakan
 			// ulang lewat socket saat halaman dibuka lagi.
-			log.Printf("issboard: idle %s, keluar — socket tetap mendengarkan", cfg.IdleTimeout)
+			log.Printf("issboard: idle %s, keluar — socket tetap mendengarkan", idleFor)
 		}
 		sh, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

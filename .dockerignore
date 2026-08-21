@@ -1,0 +1,7 @@
+.git/
+dist/
+issboard
+issboard-agent
+docs/konteks-lokal/
+*.local.yaml
+*.env

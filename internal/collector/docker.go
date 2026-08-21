@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -46,7 +49,13 @@ func CollectContainers(ctx context.Context, socket string) ([]Container, error) 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("docker menjawab %s", resp.Status)
 	}
+	return parseContainers(resp.Body)
+}
 
+// parseContainers dipisahkan dari pemanggilan HTTP supaya bisa diuji dengan
+// jawaban Docker yang direkam. Di sinilah bentuk data dunia nyata paling
+// sering mengejutkan — network kosong, port 0.0.0.0, status ber-embel-embel.
+func parseContainers(r io.Reader) ([]Container, error) {
 	var raw []struct {
 		Names  []string `json:"Names"`
 		Image  string   `json:"Image"`
@@ -62,24 +71,28 @@ func CollectContainers(ctx context.Context, socket string) ([]Container, error) 
 			Networks map[string]struct{} `json:"Networks"`
 		} `json:"NetworkSettings"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := json.NewDecoder(r).Decode(&raw); err != nil {
 		return nil, err
 	}
 
 	out := make([]Container, 0, len(raw))
 	for _, r := range raw {
 		c := Container{Image: r.Image, State: r.State, Status: r.Status}
+		c.Health = healthFromStatus(r.Status)
 		if len(r.Names) > 0 {
-			c.Name = r.Names[0]
-			if len(c.Name) > 0 && c.Name[0] == '/' {
-				c.Name = c.Name[1:]
-			}
+			c.Name = strings.TrimPrefix(r.Names[0], "/")
 		}
 		for n := range r.NetworkSettings.Networks {
 			c.Networks = append(c.Networks, n)
 		}
+		// Urutan map tidak tentu; tanpa ini daftar network berganti urutan
+		// tiap refresh dan halaman terlihat berkedip tanpa ada yang berubah.
+		sort.Strings(c.Networks)
+
 		seen := map[string]bool{}
 		for _, p := range r.Ports {
+			// Hanya yang terikat ke alamat non-loopback: itulah yang
+			// menjangkau LAN dan seluruh jaringan mesh.
 			if p.PublicPort == 0 || p.IP == "" || p.IP == "127.0.0.1" || p.IP == "::1" {
 				continue
 			}
@@ -89,7 +102,32 @@ func CollectContainers(ctx context.Context, socket string) ([]Container, error) 
 				c.PublishedPorts = append(c.PublishedPorts, s)
 			}
 		}
+		sort.Strings(c.PublishedPorts)
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// healthFromStatus mengambil hasil healthcheck dari teks status.
+//
+// Docker TIDAK memberikan field terpisah di /containers/json: satu-satunya
+// tempat hasil healthcheck muncul adalah embel-embel di Status, seperti
+// "Up 2 hours (unhealthy)". Tanpa ini, aturan "healthcheck gagal" di
+// internal/health tidak pernah bisa menyala di data sungguhan — ia cuma
+// bekerja di mode demo, yang justru bentuk kebutaan paling menyesatkan.
+func healthFromStatus(status string) string {
+	i := strings.LastIndex(status, "(")
+	j := strings.LastIndex(status, ")")
+	if i < 0 || j < i {
+		return ""
+	}
+	switch inner := strings.ToLower(strings.TrimSpace(status[i+1 : j])); {
+	case inner == "healthy":
+		return "healthy"
+	case inner == "unhealthy":
+		return "unhealthy"
+	case strings.HasPrefix(inner, "health: starting"):
+		return "starting"
+	}
+	return ""
 }

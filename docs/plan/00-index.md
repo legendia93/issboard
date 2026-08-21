@@ -32,7 +32,10 @@ Ditetapkan 18 Agustus 2026:
 | 1 | [`01-ui-nothing-os.md`](01-ui-nothing-os.md) — tema, bento, mode demo | ✅ selesai |
 | 2 | [`02-agent.md`](02-agent.md) — riwayat + notifikasi (ntfy, Telegram) | ✅ selesai |
 | 3 | [`03-sparkline.md`](03-sparkline.md) — grafik mengisi ruang fase 1 | ✅ selesai |
-| 4 | [`04-distribusi.md`](04-distribusi.md) — test, `.deb`, Docker, multi-distro | 🚧 berikutnya |
+| 4 | [`04-distribusi.md`](04-distribusi.md) — test, `.deb`, Docker, multi-distro | ✅ selesai |
+
+Keempat fase yang direncanakan sudah selesai. Yang tersisa di bawah belum
+pernah dijadwalkan, dan sebagiannya menunggu keputusan, bukan menunggu waktu.
 
 ## Di luar fase (belum dijadwalkan)
 

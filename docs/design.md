@@ -138,7 +138,15 @@ internal/api/           GET /api/v1/*
 web/                    vanilla, ter-embed, tanpa build step
 systemd/                socket + service + timer SMART + timer agent
 libexec/                pengumpul SMART milik root
+packaging/              .deb, tarball, docker-compose
+install.sh              pemasang POSIX sh untuk distro tanpa dpkg
 ```
+
+Test ada di sebelah kode yang diujinya. Yang diutamakan adalah **parser** —
+di situlah data dunia nyata paling sering mengejutkan — lalu seluruh aturan
+`internal/health` dengan data mode demo sebagai fixture. Catatan lengkap
+tentang distro lain, termasuk yang belum diuji, ada di
+[`distro.md`](distro.md).
 
 **Kegagalan per-bagian tidak menggagalkan seluruh respons.** Setiap collector
 yang gagal menaruh pesannya di `errors[]`, dan sisanya tetap disajikan. Di
@@ -349,7 +357,12 @@ tidak ada alasan menuliskannya dua kali.
 ## 10. Status & yang belum ada
 
 v1 berjalan dan menyajikan data nyata, dengan tampilan Nothing OS, mode demo,
-notifikasi lewat `issboard-agent` yang terpisah, dan sparkline riwayat.
+notifikasi lewat `issboard-agent` yang terpisah, sparkline riwayat, test
+otomatis, dan paket `.deb`.
+
+Yang **belum diuji** dicatat apa adanya di [`distro.md`](distro.md) dan di
+tiap berkas rencana — SELinux enforcing, Podman, Telegram ke API aslinya,
+unit systemd di bawah systemd sungguhan, dan arsitektur selain amd64.
 
 Rencana yang sedang berjalan — beserta urutannya — ada di
 [`plan/`](plan/00-index.md). Ringkasnya yang belum:
@@ -357,5 +370,4 @@ Rencana yang sedang berjalan — beserta urutannya — ada di
 - Perbandingan konfigurasi snapshot (mis. `sanoid.conf`) dengan dataset nyata
 - Panel versi app + deteksi drift antara config dan container yang jalan
 - Fase arsip & unduhan backup
-- Test otomatis
 - Autentikasi (lihat bagian 8)

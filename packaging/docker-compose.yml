@@ -1,0 +1,27 @@
+# Cara paling cepat MENCOBA issboard. Bukan cara memasangnya sungguhan —
+# baca peringatan di Dockerfile lebih dulu.
+#
+#   docker compose -f packaging/docker-compose.yml up --build
+#   lalu buka http://127.0.0.1:9955
+services:
+  issboard:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    # Loopback saja. Dashboard ini tidak punya autentikasi sendiri di v1;
+    # dari luar aksesnya lewat SSH tunnel atau reverse proxy yang punya.
+    ports:
+      - "127.0.0.1:9955:9955"
+    volumes:
+      # Read-only: issboard cuma membaca daftar container.
+      # ⚠️ Akses ke socket Docker setara root di host. Pembatas sebenarnya
+      # di v1 adalah tidak adanya satu pun endpoint yang bermutasi.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Cache SMART ditulis unit root di HOST; container hanya membacanya.
+      - /var/cache/issboard:/var/cache/issboard:ro
+      # Riwayat untuk sparkline, ditulis issboard-agent di host.
+      - /var/lib/issboard:/var/lib/issboard:ro
+    # ZFS sengaja TIDAK dipetakan: butuh /dev/zfs plus kecocokan versi biner
+    # zfs di image dengan modul kernel di host, dan itu tidak bisa dijanjikan.
+    # Bagian ZFS akan kosong dan melaporkan error — memang begitu adanya.
+    restart: unless-stopped

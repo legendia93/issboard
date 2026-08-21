@@ -13,7 +13,7 @@ supaya pertanyaan yang sebenarnya dicari terjawab tanpa membaca satu kartu pun.
 Vonis yang sama itulah yang dikirim ke HP oleh `issboard-agent`.
 
 > **Status: v1 awal.** Berjalan dan menyajikan data nyata, tapi belum dipakai
-> lama di produksi. Belum ada test otomatis.
+> lama di produksi.
 >
 > Notifikasi dan sparkline riwayat sudah ada, lewat
 > [`issboard-agent`](#notifikasi--riwayat-issboard-agent) yang terpisah.
@@ -108,28 +108,59 @@ mesin untuk memverifikasinya. Laporan dari yang sempat mencoba sangat dihargai.
 
 ## Memasang
 
+Jalur yang dianjurkan adalah paket `.deb`:
+
 ```bash
-sudo install -m 0755 issboard              /usr/local/bin/issboard
-sudo install -m 0755 issboard-agent        /usr/local/bin/issboard-agent
-sudo install -m 0755 libexec/issboard-smart-collect \
-                                           /usr/local/libexec/issboard-smart-collect
-sudo install -m 0644 issboard.example.yaml /etc/issboard.yaml
-sudo install -m 0644 systemd/*             /etc/systemd/system/
-
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin issboard
-sudo usermod -aG docker issboard           # hanya untuk MEMBACA socket
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now issboard-smart.timer
-sudo systemctl enable --now issboard.socket   # socket, BUKAN service
-sudo systemctl enable --now issboard-agent.timer
+./packaging/build-deb.sh                 # → dist/issboard_<versi>_<arch>.deb
+sudo apt install ./dist/issboard_*.deb
 ```
 
-Sunting `/etc/issboard.yaml` seperlunya, lalu buka `http://127.0.0.1:9955`.
+Paketnya membuat user sistem `issboard`, menyiapkan folder cache dan data,
+lalu menyalakan `issboard.socket`, `issboard-smart.timer`, dan
+`issboard-agent.timer`. Config di `/etc/issboard.yaml` ditandai *conffile*,
+jadi suntingan Anda tidak ditimpa saat upgrade.
+
+Distro ber-systemd tanpa dpkg memakai tarball atau langsung dari repo:
+
+```bash
+./packaging/build-tarball.sh             # → dist/issboard_<versi>_<arch>.tar.gz
+# atau, dari repo:
+sudo ./install.sh                        # membangun binary kalau belum ada
+```
+
+`install.sh --uninstall` mencopot binary dan unit, dan **sengaja tidak
+menghapus** config maupun `/var/lib/issboard` — riwayat dan ingatan alert itu
+milik Anda, bukan milik paket.
 
 > ⚠️ **`issboard.service` sengaja tidak untuk di-`enable`.** Socket yang
 > menyalakannya. Meng-`enable` service-nya membuat daemon yang jalan terus —
 > persis yang dihindari desain ini.
+
+Sunting `/etc/issboard.yaml` seperlunya, lalu buka `http://127.0.0.1:9955`.
+
+### Mencoba dengan Docker
+
+```bash
+docker compose -f packaging/docker-compose.yml up --build
+```
+
+Didukung sebagai **jalur coba-coba**, dengan tiga catatan yang harus jujur:
+
+1. **Kalau Docker mati, dashboard-nya ikut mati** — persis saat paling
+   dibutuhkan. issboard ada di host justru supaya tetap hidup saat container
+   bermasalah. Ini trade-off yang sadar, bukan bug.
+2. **ZFS tidak didukung dari dalam container.** Biner `zfs`/`zpool` di image
+   harus cocok versinya dengan modul kernel host, dan versi ZFS mesin orang
+   lain tidak bisa dikontrol — jadi image-nya sengaja tidak memasang zfsutils
+   sama sekali. Bagian ZFS akan kosong dan melaporkan error.
+3. **Tidak ada socket activation di dalam container**, jadi prosesnya jalan
+   terus — bukan lagi 0 MB saat menganggur.
+
+### Distro lain
+
+Podman, SELinux, non-systemd, dan jalur unit `/lib` vs `/usr/lib` dibahas di
+[`docs/distro.md`](docs/distro.md) — lengkap dengan **apa yang belum pernah
+diuji**, ditandai jelas.
 
 ## Notifikasi & riwayat (`issboard-agent`)
 
@@ -235,6 +266,24 @@ permintaan yang kebetulan mengambil ulang.
 `findings[]` dihitung di server, bukan di JavaScript, supaya pengirim
 notifikasi nanti memakai aturan yang persis sama. Tiap temuan punya `key` yang
 stabil untuk de-duplikasi alert.
+
+## Test
+
+```bash
+go test ./...
+```
+
+Yang diuji lebih dulu adalah **parser**, karena di situlah data dunia nyata
+paling sering mengejutkan: `zpool list`/`zpool status` (termasuk membedakan
+**mirror dari stripe**, dan baris `scan:` dalam berbagai bentuk), pembacaan
+cache SMART beserta deteksi basi, dan JSON Docker (network kosong, port
+`0.0.0.0`, healthcheck yang cuma menempel di teks status).
+
+Selain itu: seluruh aturan vonis di `internal/health` — dengan **data mode demo
+sebagai fixture**, karena data itu memang dibuat memuat setiap kondisi sakit —
+serta ring buffer riwayat dan mesin de-duplikasi alert, termasuk jalur yang
+paling mudah salah: kiriman gagal harus dicoba lagi, dan siklus yang
+pengumpulannya error tidak boleh pernah melaporkan "pulih".
 
 ## Lisensi
 

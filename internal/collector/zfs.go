@@ -47,6 +47,21 @@ func CollectPools(ctx context.Context, only []string) ([]Pool, error) {
 	if err != nil {
 		return nil, err
 	}
+	pools := parsePoolList(out, only)
+	for i := range pools {
+		st, err := run(ctx, "zpool", "status", pools[i].Name)
+		if err != nil {
+			return pools, err
+		}
+		parsePoolStatus(st, &pools[i])
+	}
+	return pools, nil
+}
+
+// parsePoolList membaca keluaran `zpool list -Hp`. Dipisahkan dari
+// pemanggilan perintahnya supaya bisa diuji: di parser inilah data dunia
+// nyata paling sering mengejutkan.
+func parsePoolList(out string, only []string) []Pool {
 	want := map[string]bool{}
 	for _, p := range only {
 		want[p] = true
@@ -64,33 +79,37 @@ func CollectPools(ctx context.Context, only []string) ([]Pool, error) {
 		if len(want) > 0 && !want[f[0]] {
 			continue
 		}
-		p := Pool{
+		pools = append(pools, Pool{
 			Name:          f[0],
 			SizeBytes:     parseInt(f[1]),
 			AllocBytes:    parseInt(f[2]),
 			FreeBytes:     parseInt(f[3]),
 			Fragmentation: int(parseInt(strings.TrimSuffix(f[4], "%"))),
 			Health:        f[5],
-		}
-		if err := fillPoolStatus(ctx, &p); err != nil {
-			return pools, err
-		}
-		pools = append(pools, p)
+		})
 	}
-	return pools, nil
+	return pools
 }
 
-// fillPoolStatus mengurai `zpool status` untuk hal yang tidak disediakan
+// parsePoolStatus mengurai `zpool status` untuk hal yang tidak disediakan
 // `zpool list`: riwayat scrub, bentuk vdev, dan penghitung error.
-func fillPoolStatus(ctx context.Context, p *Pool) error {
-	out, err := run(ctx, "zpool", "status", p.Name)
-	if err != nil {
-		return err
-	}
+//
+// Bentuk keluarannya berbeda antar versi ZFS, jadi yang dibaca hanya hal yang
+// stabil — dan itulah sebabnya bagian ini yang paling butuh test.
+func parsePoolStatus(out string, p *Pool) {
 	inConfig := false
 	for _, raw := range strings.Split(out, "\n") {
 		line := strings.TrimSpace(raw)
 		switch {
+		// Nama pool dibaca dari keluarannya sendiri kalau belum diketahui.
+		// Tanpa ini, parser bergantung pada pemanggil yang sudah mengisi
+		// Name lebih dulu — dan kalau lupa, baris nama pool ikut terhitung
+		// sebagai disk, sehingga pool mirror terbaca sebagai stripe. Itu
+		// kebalikan persis dari temuan yang paling penting di dashboard ini.
+		case strings.HasPrefix(line, "pool:"):
+			if p.Name == "" {
+				p.Name = strings.TrimSpace(strings.TrimPrefix(line, "pool:"))
+			}
 		case strings.HasPrefix(line, "scan:"):
 			p.ScanLine = strings.TrimSpace(strings.TrimPrefix(line, "scan:"))
 		case strings.HasPrefix(line, "config:"):
@@ -116,7 +135,6 @@ func fillPoolStatus(ctx context.Context, p *Pool) error {
 			p.CksumErr += parseInt(f[4])
 		}
 	}
-	return nil
 }
 
 func CollectDatasets(ctx context.Context) ([]Dataset, error) {
@@ -125,7 +143,10 @@ func CollectDatasets(ctx context.Context) ([]Dataset, error) {
 		return nil, err
 	}
 	counts, _ := snapshotCounts(ctx)
+	return parseDatasets(out, counts), nil
+}
 
+func parseDatasets(out string, counts map[string]int) []Dataset {
 	var ds []Dataset
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if line == "" {
@@ -143,7 +164,7 @@ func CollectDatasets(ctx context.Context) ([]Dataset, error) {
 			SnapshotCount: counts[f[0]],
 		})
 	}
-	return ds, nil
+	return ds
 }
 
 // snapshotCounts memakai satu panggilan untuk seluruh sistem: memanggil
@@ -153,13 +174,17 @@ func snapshotCounts(ctx context.Context) (map[string]int, error) {
 	if err != nil {
 		return map[string]int{}, err
 	}
+	return parseSnapshotCounts(out), nil
+}
+
+func parseSnapshotCounts(out string) map[string]int {
 	counts := map[string]int{}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if ds, _, ok := strings.Cut(line, "@"); ok {
 			counts[ds]++
 		}
 	}
-	return counts, nil
+	return counts
 }
 
 func parseInt(s string) int64 {
