@@ -141,6 +141,12 @@ case "$1" in configure)
     # port dan mengantre koneksi berikutnya, lalu systemd menyalakan binary
     # yang baru untuk melayaninya.
     systemctl stop issboard.service || true
+
+    # Upgrade yang MEMPERBAIKI crash juga harus membersihkan status gagalnya.
+    # Socket yang sudah kena start-limit-hit tetap "failed" walau binary-nya
+    # sudah benar, jadi perbaikannya terlihat seperti tidak bekerja — dan
+    # orang lalu mencari-cari di tempat yang salah.
+    systemctl reset-failed issboard.socket issboard.service || true
     # 🔴 SOCKET-nya yang di-enable, bukan service-nya. Meng-enable
     # issboard.service membuat daemon yang jalan terus — persis yang
     # dihindari desain ini.

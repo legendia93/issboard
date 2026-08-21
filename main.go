@@ -10,12 +10,14 @@ import (
 	"embed"
 	"errors"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -45,14 +47,16 @@ func main() {
 		log.Printf("issboard: MODE DEMO — seluruh data palsu, sistem tidak disentuh")
 	}
 
-	ln, activated, err := listener(cfg.Listen)
+	lns, activated, err := listeners(cfg.Listen)
 	if err != nil {
 		log.Fatalf("listen: %v", err)
 	}
-	if activated {
-		log.Printf("issboard: socket dari systemd (%s)", ln.Addr())
-	} else {
-		log.Printf("issboard: listen sendiri di %s", ln.Addr())
+	for _, ln := range lns {
+		if activated {
+			log.Printf("issboard: socket dari systemd (%s)", ln.Addr())
+		} else {
+			log.Printf("issboard: listen sendiri di %s", ln.Addr())
+		}
 	}
 
 	// 🔴 Idle-exit HANYA masuk akal di bawah socket activation.
@@ -109,47 +113,74 @@ func main() {
 		_ = srv.Shutdown(sh)
 	}()
 
-	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("serve: %v", err)
+	// Satu server, banyak listener: tiap alamat dilayani goroutine sendiri,
+	// dan srv.Shutdown menutup semuanya sekaligus.
+	var wg sync.WaitGroup
+	for _, ln := range lns {
+		wg.Add(1)
+		go func(ln net.Listener) {
+			defer wg.Done()
+			if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("serve %s: %v", ln.Addr(), err)
+			}
+		}(ln)
 	}
+	wg.Wait()
 }
 
-// listener memakai fd 3 kalau systemd yang menyerahkannya (socket activation),
-// selain itu membuka sendiri supaya `go run` tetap bisa dipakai saat mengembangkan.
+// listeners memakai fd yang diserahkan systemd (socket activation), selain itu
+// membuka sendiri supaya `go run` tetap bisa dipakai saat mengembangkan.
+//
+// 🔴 SEMUA fd yang diserahkan dipakai, bukan cuma yang pertama.
+//
+// Satu unit socket boleh punya beberapa ListenStream — dan itu bukan kasus
+// tepi: begitu alamat tailnet ditambahkan di samping loopback, systemd
+// menyerahkan DUA fd. Versi pertama kode ini hanya menerima LISTEN_FDS=1 dan
+// jatuh ke jalur cadangan net.Listen untuk selain itu — ke alamat yang justru
+// sedang dipegang systemd. Hasilnya "address already in use", proses keluar
+// seketika, systemd menyalakannya lagi tiap koneksi, lalu socket-nya sendiri
+// ikut gagal kena start limit. Dashboard mati total, dan penyebabnya tidak
+// terlihat dari pesan systemd mana pun.
 //
 // Protokolnya kecil dan stabil, jadi diimplementasikan langsung daripada
 // menarik dependensi — alasan yang sama dengan memilih Go: nol dependensi runtime.
-func listener(addr string) (net.Listener, bool, error) {
-	if os.Getenv("LISTEN_PID") == "" || os.Getenv("LISTEN_FDS") != "1" {
+func listeners(addr string) ([]net.Listener, bool, error) {
+	n := activatedFDs()
+	if n == 0 {
 		ln, err := net.Listen("tcp", addr)
-		return ln, false, err
+		if err != nil {
+			return nil, false, err
+		}
+		return []net.Listener{ln}, false, nil
 	}
-	if pid := os.Getpid(); os.Getenv("LISTEN_PID") != itoa(pid) {
-		ln, err := net.Listen("tcp", addr)
-		return ln, false, err
-	}
+
 	const firstFD = 3
-	f := os.NewFile(firstFD, "systemd-socket")
-	ln, err := net.FileListener(f)
-	if err != nil {
-		return nil, false, err
+	out := make([]net.Listener, 0, n)
+	for i := 0; i < n; i++ {
+		f := os.NewFile(uintptr(firstFD+i), "systemd-socket")
+		ln, err := net.FileListener(f)
+		_ = f.Close()
+		if err != nil {
+			return nil, true, fmt.Errorf("fd %d dari systemd: %w", firstFD+i, err)
+		}
+		out = append(out, ln)
 	}
-	_ = f.Close()
-	return ln, true, nil
+	return out, true, nil
 }
 
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
+// activatedFDs mengembalikan berapa socket yang diserahkan systemd ke proses
+// INI, atau 0 kalau bukan socket activation. LISTEN_PID diperiksa karena
+// variabel itu ikut terwarisi anak proses, dan anak yang salah mengira
+// dirinya yang diaktifkan akan mengambil alih fd milik induknya.
+func activatedFDs() int {
+	if os.Getenv("LISTEN_PID") != strconv.Itoa(os.Getpid()) {
+		return 0
 	}
-	var b [20]byte
-	p := len(b)
-	for i > 0 {
-		p--
-		b[p] = byte('0' + i%10)
-		i /= 10
+	n, err := strconv.Atoi(os.Getenv("LISTEN_FDS"))
+	if err != nil || n < 1 {
+		return 0
 	}
-	return string(b[p:])
+	return n
 }
 
 // idleTimer memberi tahu saat tidak ada request selama d.

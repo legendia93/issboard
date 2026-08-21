@@ -315,6 +315,14 @@ membiarkan issboard di loopback dan menaruh pintu berautentikasi di depannya —
 secara struktur ini yang paling rapi, karena pembatasnya tidak lagi bergantung
 pada issboard yang mengikat alamat dengan benar.
 
+⚠️ **Beberapa alamat berarti beberapa file descriptor.** systemd menyerahkan
+satu fd per `ListenStream`, dan program yang hanya menerima `LISTEN_FDS=1`
+akan jatuh ke jalur cadangan lalu mencoba bind sendiri ke alamat yang justru
+sedang dipegang systemd. Hasilnya proses mati seketika, dinyalakan lagi tiap
+koneksi, sampai socket-nya sendiri ikut gagal kena *start limit* — dashboard
+mati total, dan penyebabnya tidak tersirat di pesan systemd mana pun. issboard
+memakai **semua** fd yang diserahkan; ini pernah salah, dan dikunci test.
+
 **Catatan penerapan:** di bawah systemd, alamatnya dipegang `issboard.socket`,
 **bukan** `listen:` di berkas config — `listen:` hanya dipakai saat berjalan
 tanpa socket activation. Ubah lewat drop-in di
