@@ -26,3 +26,32 @@ docker_socket: /var/run/docker.sock
 
 # Kosongkan untuk mendeteksi semua pool otomatis, atau daftar dipisah koma.
 # pools: pool-satu, pool-dua
+
+# --- issboard-agent (unit bertimer terpisah) ------------------------------
+#
+# Hanya dipakai issboard-agent. issboard sendiri tidak pernah mengirim apa pun:
+# prosesnya tidak hidup saat halamannya tidak dibuka, jadi ia secara desain
+# tidak bisa jadi sumber alert. Yang mengirim adalah unit bertimer terpisah.
+
+# Ditulis agent tiap menit, DIBACA issboard untuk sparkline — pola yang sama
+# dengan cache SMART, dan alasan yang sama: tidak ada daemon yang menyala terus.
+history_file: /var/lib/issboard/history.json
+
+# Ingatan "sudah dikabari". Tanpa ini, disk dengan reallocated sector akan
+# mengirim notifikasi yang sama tiap menit selamanya.
+alert_state: /var/lib/issboard/alert-state.json
+
+# Jeda diam sebelum temuan yang MASIH ada dikabari lagi. Bukan untuk mendesak,
+# tapi supaya masalah menahun tidak hilang sepenuhnya dari ingatan.
+alert_repeat: 24h
+
+# warn = semua temuan; crit = hanya yang kritis.
+notify_min_level: warn
+
+# Kanal notifikasi. Boleh dua-duanya, boleh tidak sama sekali.
+#
+# ⚠️ JANGAN menaruh token di berkas ini — berkas ini dibaca dashboard dan
+# biasanya boleh dibaca siapa saja. Pakai /etc/issboard/agent.env yang mode
+# 0600; lihat issboard-agent.env.example.
+# ntfy_url: https://ntfy.sh
+# ntfy_topic: ganti-dengan-topik-acak-yang-panjang

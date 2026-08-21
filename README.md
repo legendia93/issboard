@@ -10,9 +10,13 @@ container beserta port yang ter-*publish*, dan beban host + ARC.
 
 Di atas semuanya ada **satu vonis**: sehat, atau sekian hal yang perlu diurus —
 supaya pertanyaan yang sebenarnya dicari terjawab tanpa membaca satu kartu pun.
+Vonis yang sama itulah yang dikirim ke HP oleh `issboard-agent`.
 
 > **Status: v1 awal.** Berjalan dan menyajikan data nyata, tapi belum dipakai
 > lama di produksi. Belum ada test otomatis.
+>
+> Notifikasi sudah ada, lewat [`issboard-agent`](#notifikasi--riwayat-issboard-agent)
+> yang terpisah. Sparkline yang memakai riwayatnya belum.
 >
 > Rencana yang sedang berjalan ada di [`docs/plan/`](docs/plan/00-index.md);
 > alasan di balik bentuknya ada di [`docs/design.md`](docs/design.md).
@@ -30,8 +34,9 @@ isolasinya sambil menambah kerumitan.
 `issboard.socket`; systemd yang memegang port, prosesnya baru hidup saat
 halaman dibuka dan keluar sendiri setelah idle. Nol RAM dan nol permukaan
 serang saat tidak ada yang melihat. Konsekuensinya diterima sadar: **tidak ada
-poll latar belakang, jadi dashboard ini bukan sumber alert.** Kalau butuh
-notifikasi, itu unit systemd terpisah — jangan ubah issboard jadi daemon.
+poll latar belakang, jadi dashboard ini bukan sumber alert.** Yang mengirim
+notifikasi adalah [`issboard-agent`](#notifikasi--riwayat-issboard-agent),
+unit bertimer terpisah — bukan issboard yang diubah jadi daemon.
 
 **`smartctl` tidak pernah dipanggil di jalur request.** Memanggilnya
 **membangunkan HDD yang sedang tidur**. Dengan socket activation, satu kali
@@ -82,7 +87,8 @@ Tidak ada aset dari luar: font ikut ter-*embed*, dan halaman disajikan dengan
 ## Membangun
 
 ```bash
-go build -o issboard .      # butuh Go 1.26+
+go build -o issboard .                          # dashboard; butuh Go 1.26+
+go build -o issboard-agent ./cmd/issboard-agent # notifikasi + riwayat
 ```
 
 Menjalankan untuk mengembangkan (tanpa systemd, memakai `listen:` dari config):
@@ -104,6 +110,7 @@ mesin untuk memverifikasinya. Laporan dari yang sempat mencoba sangat dihargai.
 
 ```bash
 sudo install -m 0755 issboard              /usr/local/bin/issboard
+sudo install -m 0755 issboard-agent        /usr/local/bin/issboard-agent
 sudo install -m 0755 libexec/issboard-smart-collect \
                                            /usr/local/libexec/issboard-smart-collect
 sudo install -m 0644 issboard.example.yaml /etc/issboard.yaml
@@ -115,6 +122,7 @@ sudo usermod -aG docker issboard           # hanya untuk MEMBACA socket
 sudo systemctl daemon-reload
 sudo systemctl enable --now issboard-smart.timer
 sudo systemctl enable --now issboard.socket   # socket, BUKAN service
+sudo systemctl enable --now issboard-agent.timer
 ```
 
 Sunting `/etc/issboard.yaml` seperlunya, lalu buka `http://127.0.0.1:9955`.
@@ -122,6 +130,64 @@ Sunting `/etc/issboard.yaml` seperlunya, lalu buka `http://127.0.0.1:9955`.
 > ⚠️ **`issboard.service` sengaja tidak untuk di-`enable`.** Socket yang
 > menyalakannya. Meng-`enable` service-nya membuat daemon yang jalan terus —
 > persis yang dihindari desain ini.
+
+## Notifikasi & riwayat (`issboard-agent`)
+
+Dashboard yang harus dibuka dulu baru ketahuan ada masalah bukan sistem
+peringatan. `issboard-agent` adalah program **terpisah** yang dijalankan
+`issboard-agent.timer` tiap menit: ia mengumpulkan data dengan kode yang sama,
+menulis riwayat, mengirim notifikasi kalau ada yang perlu diurus, lalu keluar.
+
+**Kenapa timer, bukan mengubah issboard jadi daemon:**
+
+| | RAM idle | Riwayat | Bisa alert |
+|---|---|---|---|
+| issboard jadi daemon | ~15–25 MB terus-menerus | ✅ di memori, hilang saat reboot | ✅ |
+| issboard sekarang saja | **0 MB** | ❌ | ❌ |
+| **issboard + agent bertimer** | **0 MB** | ✅ dari berkas, selamat dari reboot | ✅ |
+
+Aturan temuannya **dipakai bersama** dashboard (`internal/health`), bukan
+disalin. Dua salinan aturan akan berbeda pelan-pelan, dan yang gagal duluan
+justru jalur alert — satu-satunya yang bekerja saat halaman tidak dibuka.
+
+**Kanal:** ntfy dan/atau Telegram, keduanya cuma HTTP POST, jadi tetap nol
+dependensi. Token lewat `/etc/issboard/agent.env` mode 0600 (lihat
+[`issboard-agent.env.example`](issboard-agent.env.example)), **bukan** di
+`/etc/issboard.yaml` yang boleh dibaca siapa saja.
+
+Mencoba tanpa mengirim apa pun:
+
+```bash
+./issboard-agent -config /dev/null -demo -dry-run   # data palsu, cetak saja
+./issboard-agent -config /etc/issboard.yaml -dry-run # data nyata, tetap tidak mengirim
+```
+
+### Yang menjaga alertnya tetap sepi
+
+Alert yang berisik selalu berakhir sama: diabaikan, lalu dimatikan. Karena itu:
+
+- **Satu pesan per siklus**, bukan satu per temuan. Host yang baru dipasangi
+  issboard bisa punya belasan temuan sekaligus.
+- **De-duplikasi.** Temuan yang sama tidak dikirim dua kali. Yang menembus:
+  temuan baru, tingkat yang naik (perhatian → kritis), dan pengingat setelah
+  `alert_repeat` (bawaan 24 jam).
+- **Siklus pertama dibingkai sebagai "kondisi saat ini"**, bukan "baru saja
+  terjadi" — temuannya bisa saja sudah berbulan-bulan umurnya.
+- **Kabar pulih** dikirim sekali, dengan prioritas rendah.
+- **Kiriman yang gagal tidak ditandai terkirim.** Wifi yang putus sesaat tidak
+  boleh membuat satu alert hilang selamanya; menit berikutnya dicoba lagi, dan
+  unitnya terlihat `failed` di `systemctl status`.
+- **Siklus yang pengumpulannya error tidak pernah melaporkan "pulih".** Kalau
+  `zpool` gagal dipanggil, seluruh temuan pool ikut lenyap dari daftar —
+  mengabarkannya sebagai pulih justru saat kita kehilangan kemampuan melihat
+  pool adalah kebalikan dari keadaan sebenarnya.
+
+### Riwayat
+
+`history.json` adalah ring buffer dua lapis: **60 titik tiap menit** (1 jam
+terakhir) dan **48 titik tiap 30 menit** (24 jam terakhir), ditulis atomik,
+di bawah 20 KB. issboard **membacanya**, tidak pernah menulisnya — pola yang
+sama dengan cache SMART. Sparkline yang memakainya menyusul di fase 3.
 
 ## Keamanan
 

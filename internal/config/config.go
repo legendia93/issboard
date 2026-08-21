@@ -30,6 +30,38 @@ type Config struct {
 	// Pools yang ditampilkan. Kosong = deteksi otomatis lewat `zpool list`.
 	Pools []string
 
+	// --- Di bawah ini hanya dipakai issboard-agent (unit bertimer terpisah).
+	//
+	// 🔴 issboard sendiri TIDAK PERNAH memakainya untuk mengirim apa pun.
+	// Dashboard ini tidak hidup saat halamannya tidak dibuka, jadi ia secara
+	// desain tidak bisa jadi sumber alert (docs/design.md §3.2). Yang
+	// mengirim adalah issboard-agent; issboard cuma berbagi berkas config.
+
+	// HistoryFile ditulis agent, DIBACA issboard — pola yang sama dengan
+	// cache SMART, dan alasan yang sama: RAM idle tetap 0 MB.
+	HistoryFile string
+
+	// AlertState adalah ingatan "sudah dikabari", supaya temuan yang bertahan
+	// tidak mengirim notifikasi tiap menit selamanya.
+	AlertState string
+
+	// AlertRepeat: jeda diam sebelum temuan yang masih ada dikabari lagi.
+	AlertRepeat time.Duration
+
+	// NotifyMinLevel: "warn" (semua) atau "crit" (hanya yang kritis).
+	NotifyMinLevel string
+
+	// Kanal notifikasi. Boleh dua-duanya, boleh tidak sama sekali.
+	//
+	// ⚠️ Token JANGAN ditaruh di /etc/issboard.yaml yang dibaca semua orang.
+	// Pakai variabel lingkungan lewat EnvironmentFile systemd yang permisinya
+	// ketat — lihat systemd/issboard-agent.service.
+	NtfyURL        string
+	NtfyTopic      string
+	NtfyToken      string
+	TelegramToken  string
+	TelegramChatID string
+
 	// Demo menyajikan data palsu dan TIDAK menyentuh sistem sama sekali:
 	// tidak ada zpool, tidak ada socket Docker, tidak ada cache SMART dibaca.
 	// Dipakai untuk menggarap tampilan kondisi sakit, dan supaya screenshot
@@ -44,6 +76,14 @@ func Default() Config {
 		IdleTimeout:  5 * time.Minute,
 		SmartCache:   "/var/cache/issboard/smart.json",
 		DockerSocket: "/var/run/docker.sock",
+
+		HistoryFile: "/var/lib/issboard/history.json",
+		AlertState:  "/var/lib/issboard/alert-state.json",
+		// Sehari sekali: cukup untuk menahan masalah menahun tetap terlihat,
+		// cukup jarang untuk tidak jadi kebisingan yang dimatikan orang.
+		AlertRepeat:    24 * time.Hour,
+		NotifyMinLevel: "warn",
+		NtfyURL:        "https://ntfy.sh",
 	}
 }
 
@@ -54,6 +94,7 @@ func Load(path string) (Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			c.applyEnv()
 			return c, nil
 		}
 		return c, err
@@ -87,6 +128,26 @@ func Load(path string) (Config, error) {
 			c.DockerSocket = val
 		case "demo":
 			c.Demo = val == "true" || val == "yes" || val == "1"
+		case "history_file":
+			c.HistoryFile = val
+		case "alert_state":
+			c.AlertState = val
+		case "alert_repeat":
+			if d, err := time.ParseDuration(val); err == nil {
+				c.AlertRepeat = d
+			}
+		case "notify_min_level":
+			c.NotifyMinLevel = val
+		case "ntfy_url":
+			c.NtfyURL = val
+		case "ntfy_topic":
+			c.NtfyTopic = val
+		case "ntfy_token":
+			c.NtfyToken = val
+		case "telegram_token":
+			c.TelegramToken = val
+		case "telegram_chat_id":
+			c.TelegramChatID = val
 		case "pools":
 			c.Pools = nil
 			for _, p := range strings.Split(val, ",") {
@@ -96,5 +157,33 @@ func Load(path string) (Config, error) {
 			}
 		}
 	}
-	return c, sc.Err()
+	if err := sc.Err(); err != nil {
+		return c, err
+	}
+	c.applyEnv()
+	return c, nil
+}
+
+// applyEnv membiarkan variabel lingkungan menimpa berkas config.
+//
+// Ini jalur yang DIANJURKAN untuk token: systemd bisa memuatnya lewat
+// EnvironmentFile dari berkas ber-permisi 0600 milik root, sementara
+// /etc/issboard.yaml boleh tetap bisa dibaca siapa saja. Kredensial di dalam
+// berkas config adalah cara paling mudah token ikut ter-commit ke repo —
+// dan repo ini publik.
+func (c *Config) applyEnv() {
+	for _, e := range []struct {
+		key string
+		dst *string
+	}{
+		{"ISSBOARD_NTFY_URL", &c.NtfyURL},
+		{"ISSBOARD_NTFY_TOPIC", &c.NtfyTopic},
+		{"ISSBOARD_NTFY_TOKEN", &c.NtfyToken},
+		{"ISSBOARD_TELEGRAM_TOKEN", &c.TelegramToken},
+		{"ISSBOARD_TELEGRAM_CHAT_ID", &c.TelegramChatID},
+	} {
+		if v := strings.TrimSpace(os.Getenv(e.key)); v != "" {
+			*e.dst = v
+		}
+	}
 }

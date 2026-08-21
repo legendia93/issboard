@@ -1,0 +1,60 @@
+# Menulis riwayat dan mengirim notifikasi. Dijalankan issboard-agent.timer.
+#
+# 🔴 Unit ini ada JUSTRU supaya issboard tidak perlu jadi daemon.
+#
+# issboard memakai socket activation: kalau halamannya tidak dibuka, prosesnya
+# tidak hidup, jadi ia secara desain tidak bisa jadi sumber alert. Yang benar
+# bukan menambal itu dengan Restart=always di atas issboard.service —
+# melainkan proses kecil ini, yang hidup beberapa milidetik tiap menit lalu
+# keluar. RAM idle tetap 0 MB.
+[Unit]
+Description=issboard-agent: riwayat + notifikasi kesehatan host
+# Kanal notifikasi butuh jaringan. Kalau belum ada, agent tetap berguna:
+# riwayatnya tetap ditulis dan pengiriman dicoba lagi menit berikutnya.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/issboard-agent -config /etc/issboard.yaml
+
+# User yang sama dengan issboard: keduanya membaca hal yang sama, dan
+# riwayat yang ditulis di sini harus bisa dibaca dashboard.
+User=issboard
+Group=issboard
+SupplementaryGroups=docker
+
+# Token TIDAK ditaruh di /etc/issboard.yaml yang boleh dibaca siapa saja.
+# Berkas ini milik root, mode 0600, dan systemd yang menyerahkan isinya.
+# Awalan '-' berarti berkasnya boleh tidak ada — agent tetap jalan tanpa kanal.
+EnvironmentFile=-/etc/issboard/agent.env
+
+# systemd yang membuat /var/lib/issboard dengan pemilik yang benar. Di sinilah
+# history.json dan alert-state.json ditulis.
+StateDirectory=issboard
+StateDirectoryMode=0750
+
+# Satu jalan tidak boleh menggantung sampai jalan berikutnya menumpuk di
+# atasnya. Batas di dalam program 45 detik; ini jaring pengaman terakhir.
+TimeoutStartSec=90
+
+# Pengerasan, sama seperti issboard.service.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+# /dev/zfs dibutuhkan zpool; SMART tidak dibaca di sini, cuma berkas cache-nya.
+PrivateDevices=no
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+# AF_INET dibutuhkan untuk mengirim ke ntfy/Telegram; AF_UNIX untuk socket
+# container.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+# sengaja kosong: yang di-enable adalah timer-nya.

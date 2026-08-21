@@ -34,8 +34,11 @@ Batas ini menjaga proyeknya tetap kecil:
 - **Bukan sistem monitoring.** Tidak ada time-series, tidak ada grafik riwayat,
   tidak ada scraping. Kalau butuh itu, Prometheus + Grafana sudah ada dan
   jauh lebih baik.
-- **Bukan sistem alert.** Lihat keputusan socket activation di bawah — dashboard
-  ini secara struktural tidak bisa jadi sumber alert, dan itu disengaja.
+- **Dashboard-nya bukan sumber alert.** Lihat keputusan socket activation di
+  bawah — halaman ini secara struktural tidak bisa memberi tahu apa pun saat
+  tidak dibuka, dan itu disengaja. Notifikasi ada, tapi dikerjakan program
+  terpisah yang bertimer (bagian 9) — bukan dengan menghidupkan dashboard
+  terus-menerus.
 - **Bukan pengganti Cockpit atau Portainer.** Tidak ada terminal, tidak ada
   manajemen container.
 - **Bukan metrik aplikasi.** Kesehatan *host*, bukan kesehatan app di atasnya.
@@ -78,6 +81,11 @@ dan permukaan serangannya hilang saat tidak ada yang melihat.
 > diinginkan, itu **unit systemd terpisah** yang kecil dan tetap jalan berkala
 > — **jangan** tukar keputusan socket activation demi itu.
 
+Sejak fase 2, unit terpisah itu ada: `issboard-agent`, dijalankan timer tiap
+menit. Ia memakai ulang `internal/collector` dan `internal/health`, menulis
+riwayat ke berkas, mengirim notifikasi, lalu keluar — RSS kembali nol. Lihat
+bagian 9.
+
 ### 3.3 `smartctl` tidak pernah dipanggil di jalur request
 
 Ini larangan keras, dan alasannya fisik: **`smartctl` membangunkan HDD yang
@@ -114,6 +122,7 @@ bukan sekadar ketiadaan data.
 
 ```
 main.go                 wiring, socket activation, idle-exit
+cmd/issboard-agent/     binary KEDUA: riwayat + notifikasi, bertimer
 internal/config/        config sederhana "kunci: nilai", tanpa dependensi
 internal/collector/
   collector.go          cache per-bagian dengan TTL masing-masing
@@ -122,9 +131,12 @@ internal/collector/
   docker.go             socket Docker lewat unix transport
   host.go               /proc + /proc/spl/kstat/zfs/arcstats
 internal/health/        aturan vonis — dipakai ulang pengirim notifikasi
+internal/history/       ring buffer 2 lapis; agent menulis, issboard membaca
+internal/alert/         de-duplikasi "sudah dikabari" + penyusun pesan
+internal/notify/        ntfy & Telegram — cuma HTTP POST, nol dependensi
 internal/api/           GET /api/v1/*
 web/                    vanilla, ter-embed, tanpa build step
-systemd/                socket + service + timer SMART
+systemd/                socket + service + timer SMART + timer agent
 libexec/                pengumpul SMART milik root
 ```
 
@@ -231,15 +243,91 @@ belakangan:
    meloloskan hal seperti `pool/app@../..`. Ambil daftar nyata dari sistem,
    cocokkan persis, tolak sisanya.
 
-## 9. Status & yang belum ada
+## 9. Notifikasi & riwayat: `issboard-agent`
 
-v1 berjalan dan menyajikan data nyata, dengan tampilan Nothing OS dan mode demo.
+Program **kedua**, dijalankan `issboard-agent.timer` tiap menit. Ia memakai
+ulang `internal/collector` dan `internal/health`, menulis riwayat, mengirim
+paling banyak satu pesan, lalu keluar.
+
+Godaan yang ditolak di sini adalah menjadikan issboard daemon supaya bisa
+mengirim alert. Angkanya yang membuat pilihannya jelas:
+
+| | RAM idle | CPU idle | Riwayat | Bisa alert |
+|---|---|---|---|---|
+| issboard jadi daemon | ~15–25 MB terus-menerus | poll tiap 15 dtk selamanya | ✅ di memori | ✅ |
+| issboard sekarang saja | **0 MB** | **0** | ❌ | ❌ |
+| **issboard + agent bertimer** | **0 MB** | 1 spawn/menit | ✅ dari berkas | ✅ |
+
+Riwayat di berkas juga **selamat dari reboot** — sesuatu yang daemon in-memory
+justru tidak punya.
+
+### 9.1 Aturannya tidak boleh disalin
+
+Agent tidak menulis ulang satu pun aturan vonis. Semuanya di `internal/health`,
+dipakai bersama dashboard. Dua salinan aturan di dua tempat akan berbeda
+pelan-pelan, dan yang gagal duluan justru jalur alert — satu-satunya yang
+bekerja saat halaman tidak dibuka.
+
+### 9.2 Yang menjaga alertnya tetap sepi
+
+Alert yang berisik berakhir diabaikan, lalu dimatikan — hasilnya sama saja
+dengan tidak punya alert. Karena itu:
+
+- **Satu pesan per siklus**, bukan satu per temuan.
+- **De-duplikasi** lewat `key` temuan yang stabil, disimpan di
+  `alert-state.json`. Yang menembusnya cuma tiga hal: temuan baru, tingkat yang
+  naik, dan pengingat setelah `alert_repeat`.
+- **Siklus pertama dibingkai "kondisi saat ini"**, bukan "baru saja terjadi":
+  di host yang sudah lama berjalan, temuannya bisa berumur berbulan-bulan.
+- **Pesan dipotong** di ~3,5 KB dengan penghitung sisanya. ntfy dan Telegram
+  sama-sama menolak badan pesan yang terlalu panjang, dan alert yang gagal
+  terkirim karena isinya kebanyakan adalah kegagalan diam.
+
+### 9.3 Dua aturan yang lahir dari cara ini gagal
+
+Keduanya jenis kegagalan yang sama: sistemnya diam atau berbohong justru saat
+sedang bermasalah.
+
+1. **Kiriman yang gagal tidak pernah ditandai terkirim.** Wifi putus sesaat
+   tidak boleh menghapus satu alert selamanya. Ini berlaku juga untuk kabar
+   "sudah pulih": ingatannya ditahan sampai kabar itu benar-benar sampai.
+2. **Siklus yang pengumpulannya error tidak pernah melaporkan "pulih".** Kalau
+   `zpool` gagal dipanggil, seluruh temuan pool ikut lenyap dari daftar. Tanpa
+   penjaga ini, agent akan mengabarkan "pool sudah pulih" persis saat ia
+   kehilangan kemampuan melihat pool sama sekali.
+
+### 9.4 Riwayat
+
+Ring buffer **dua lapis** dalam satu berkas, ditulis atomik seperti cache SMART:
+60 titik jarak 1 menit (1 jam terakhir) dan 48 titik jarak 30 menit (24 jam
+terakhir), di bawah 20 KB. Lapis kasar berisi **rata-rata**, bukan cuplikan
+sesaat, supaya lonjakan tidak hilang di grafik 24 jam.
+
+Yang disimpan hanya angka yang berguna sebagai tren. Disk yang sedang tidur
+**tidak dicatat sama sekali**, bukan dicatat 0°C — 0 berarti "tidak terbaca",
+dan menyimpannya sebagai angka akan menggambar jurang palsu.
+
+Pemakaian CPU butuh dua cuplikan `/proc/stat`, dan proses yang hidup beberapa
+milidetik tidak punya cuplikan sebelumnya. Cuplikan itu ikut disimpan di berkas
+riwayat — angkanya jadi rata-rata satu menit penuh, bukan hasil tidur 300 ms.
+
+### 9.5 Kredensial
+
+Token **tidak boleh** masuk `/etc/issboard.yaml`: berkas itu dibaca dashboard
+dan biasanya boleh dibaca siapa saja. Jalurnya `EnvironmentFile` systemd dari
+berkas mode 0600 milik root. Variabel lingkungan menimpa berkas config, jadi
+tidak ada alasan menuliskannya dua kali.
+
+## 10. Status & yang belum ada
+
+v1 berjalan dan menyajikan data nyata, dengan tampilan Nothing OS, mode demo,
+dan — sejak fase 2 — notifikasi lewat `issboard-agent` yang terpisah.
 
 Rencana yang sedang berjalan — beserta urutannya — ada di
 [`plan/`](plan/00-index.md). Ringkasnya yang belum:
 
-- **Riwayat & notifikasi** lewat unit bertimer terpisah ([`plan/02-agent.md`](plan/02-agent.md))
-- **Sparkline** yang mengisi ruang yang sudah disiapkan di kartu
+- **Sparkline** yang mengisi ruang yang sudah disiapkan di kartu, memakai
+  riwayat yang sudah ditulis agent ([`plan/03-sparkline.md`](plan/03-sparkline.md))
 - Perbandingan konfigurasi snapshot (mis. `sanoid.conf`) dengan dataset nyata
 - Panel versi app + deteksi drift antara config dan container yang jalan
 - Fase arsip & unduhan backup

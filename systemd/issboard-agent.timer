@@ -1,0 +1,18 @@
+# INI yang di-enable:
+#   sudo systemctl enable --now issboard-agent.timer
+[Unit]
+Description=Jalankan issboard-agent tiap menit
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+# Kelonggaran ini membiarkan systemd menggabungkan bangun timer dengan yang
+# lain. Untuk kondisi yang bertahan berjam-jam, ketepatan detik tidak ada
+# gunanya, sedangkan membangunkan CPU tiap menit tepat waktu ada biayanya.
+AccuracySec=15s
+# Sengaja TIDAK Persistent: tidak ada gunanya mengejar ketinggalan tik satu
+# menit setelah mesin menyala. Yang dibutuhkan cuma tik berikutnya.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

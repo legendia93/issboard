@@ -30,13 +30,13 @@ Ditetapkan 18 Agustus 2026:
 | Fase | Berkas | Status |
 |---|---|---|
 | 1 | [`01-ui-nothing-os.md`](01-ui-nothing-os.md) — tema, bento, mode demo | ✅ selesai |
-| 2 | [`02-agent.md`](02-agent.md) — riwayat + notifikasi (ntfy, Telegram) | 🚧 berikutnya |
-| 3 | [`03-sparkline.md`](03-sparkline.md) — grafik mengisi ruang fase 1 | ⬜ belum |
+| 2 | [`02-agent.md`](02-agent.md) — riwayat + notifikasi (ntfy, Telegram) | ✅ selesai |
+| 3 | [`03-sparkline.md`](03-sparkline.md) — grafik mengisi ruang fase 1 | 🚧 berikutnya |
 | 4 | [`04-distribusi.md`](04-distribusi.md) — test, `.deb`, Docker, multi-distro | ⬜ belum |
 
 ## Di luar fase (belum dijadwalkan)
 
-Dari `design.md` bagian 9, masih menunggu:
+Dari `design.md` bagian 10, masih menunggu:
 
 - Perbandingan konfigurasi snapshot (mis. `sanoid.conf`) dengan dataset nyata
 - Panel versi app + deteksi drift antara config dan container yang jalan
