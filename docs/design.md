@@ -261,9 +261,8 @@ lebih berbahaya daripada dashboard yang dirancang benar.
 
 Penerapannya di v1:
 
-- **Bind ke loopback saja.** Akses dari luar lewat SSH tunnel atau reverse
-  proxy yang punya autentikasi sendiri. Jangan pernah ditaruh langsung di LAN
-  atau VPN mesh.
+- **Bawaannya loopback saja**, dan alamatnya boleh diperluas hanya ke jaringan
+  yang dirinya sendiri sudah mengautentikasi perangkat. Rinciannya di 8.1.
 - **Tidak ada autentikasi bawaan** di v1 — disengaja, karena read-only di balik
   loopback. **Begitu ada satu endpoint yang bermutasi, autentikasi wajib lebih
   dulu**, bukan menyusul.
@@ -272,6 +271,58 @@ Penerapannya di v1:
 - ⚠️ Keanggotaan grup `docker` **setara root** di kebanyakan sistem. Grup itu
   diberikan hanya untuk membaca socket; pembatas sebenarnya di v1 adalah
   **tidak adanya jalur mutasi sama sekali.**
+
+### 8.1 Sampai di mana dashboard ini boleh dijangkau
+
+Versi pertama aturan ini berbunyi *"jangan pernah ditaruh langsung di LAN atau
+VPN mesh"* — loopback, titik. Itu ditulis saat model ancamannya berbeda, dan
+ditinjau ulang setelah keadaannya berubah. **Aturan yang alasannya sudah
+kedaluwarsa tapi tidak pernah ditinjau berakhir dua cara: dilanggar diam-diam,
+atau dipatuhi tanpa ada yang ingat kenapa.** Keduanya lebih buruk daripada
+aturan yang diperbarui dengan sadar.
+
+Yang tidak berubah adalah dasarnya: **issboard v1 tidak punya autentikasi
+sendiri**, dan halamannya memuat hostname, nama pool, daftar container, serta
+port yang ter-*publish* — peta pengintaian yang rapi bagi siapa pun yang sudah
+berada di jaringan yang sama. Jadi pertanyaannya bukan "boleh dijangkau dari
+mana", melainkan **"siapa yang sudah diautentikasi oleh jaringan itu sebelum
+sampai ke sini"**.
+
+| Jaringan | Boleh? | Alasan |
+|---|---|---|
+| Loopback | ✅ selalu | Tidak ada yang bisa menjangkaunya tanpa akses ke mesin |
+| **Tailnet / VPN mesh** | ✅ dengan syarat | Perangkat diverifikasi kunci WireGuard **sebelum** paket sampai; lalu lintasnya terenkripsi |
+| LAN | ❌ | Berada di LAN bukan bukti identitas apa pun |
+| `0.0.0.0` | ❌ | Berarti dua-duanya sekaligus, dan biasanya tidak disengaja |
+| Publik | ❌ | Tidak dengan v1 yang tanpa autentikasi |
+
+Syarat untuk tailnet, dan ketiganya mengikat:
+
+1. **Bind ke alamat tailnet yang spesifik**, bukan `0.0.0.0`. Mengikat ke
+   semua alamat lalu mengandalkan firewall berarti satu aturan firewall yang
+   keliru sudah cukup untuk membocorkannya ke LAN.
+2. **ACL tailnet adalah kontrol akses yang sebenarnya.** Kalau semua perangkat
+   di tailnet boleh menjangkaunya, maka batasnya adalah perangkat paling lemah
+   di sana. Itu keputusan yang harus diambil sadar, bukan bawaan yang
+   kebetulan.
+3. **Begitu ada endpoint yang bermutasi, autentikasi wajib lebih dulu** —
+   aturan ini tidak ikut longgar. Jaringan yang mengautentikasi *perangkat*
+   tidak sama dengan aplikasi yang mengautentikasi *orang*.
+
+Alternatif yang tetap sah dan tidak menyentuh alamat issboard sama sekali:
+`tailscale serve`, atau reverse proxy yang punya autentikasi sendiri. Keduanya
+membiarkan issboard di loopback dan menaruh pintu berautentikasi di depannya —
+secara struktur ini yang paling rapi, karena pembatasnya tidak lagi bergantung
+pada issboard yang mengikat alamat dengan benar.
+
+**Catatan penerapan:** di bawah systemd, alamatnya dipegang `issboard.socket`,
+**bukan** `listen:` di berkas config — `listen:` hanya dipakai saat berjalan
+tanpa socket activation. Ubah lewat drop-in di
+`/etc/systemd/system/issboard.socket.d/`, jangan menyunting unit bawaan paket,
+karena suntingan itu akan hilang saat upgrade. `ListenStream` bersifat
+menumpuk: menambah satu baris berarti menambah alamat, bukan menggantinya.
+Alamat tailnet juga butuh `FreeBind=true`, karena `tailscale0` bisa naik
+setelah socket dibuat dan bind ke alamat yang belum ada akan gagal saat boot.
 
 ### Kalau nanti ada CRUD
 

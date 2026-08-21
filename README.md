@@ -242,8 +242,13 @@ adalah satu-satunya tempat hal itu bisa ketahuan.
 
 ## Keamanan
 
-- **Bind ke loopback saja.** Akses dari luar lewat SSH tunnel atau reverse
-  proxy yang punya autentikasi. Jangan taruh langsung di LAN atau tailnet.
+- **Bawaannya loopback saja.** Boleh diperluas ke jaringan yang sudah
+  mengautentikasi perangkatnya sendiri — tailnet WireGuard, misalnya — dengan
+  mengikat ke alamat tailnet yang **spesifik**, bukan `0.0.0.0`. LAN tidak
+  termasuk: berada di LAN bukan bukti identitas apa pun. Alternatif yang lebih
+  rapi: `tailscale serve` atau reverse proxy berautentikasi di depannya, supaya
+  issboard tetap di loopback. Rinciannya di
+  [design.md §8.1](docs/design.md).
 - **issboard tidak punya autentikasi sendiri** di v1. Ini disengaja: read-only
   di belakang loopback. Begitu ada endpoint yang bermutasi, autentikasi wajib
   lebih dulu.
