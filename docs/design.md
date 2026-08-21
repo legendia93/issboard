@@ -107,6 +107,16 @@ satu jawaban.
 **Cache yang basi ditandai di UI.** Timer yang mati adalah temuan tersendiri,
 bukan sekadar ketiadaan data.
 
+**Disk yang tidur tidak pernah dinilai.** Konsekuensi `-n standby` adalah
+disk yang tertidur mengembalikan berkas kosong: suhu 0, dan `passed` yang
+kosongnya berarti `false`. Menilai itu apa adanya menghasilkan alarm KRITIS
+"SMART gagal" untuk disk yang sebenarnya baik-baik saja — ketiadaan data
+dibaca sebagai data buruk. Di mesin sungguhan hal ini muncul pada menit
+pertama pemasangan, dan alarm palsu di hari pertama adalah cara tercepat
+membuat orang berhenti memercayai alatnya. Aturannya sekarang: **disk
+standby dilewati seluruhnya**; yang menjaga kita tidak buta adalah penanda
+cache basi, bukan menebak-nebak dari berkas kosong.
+
 ## 4. Interval pengambilan data
 
 "Berkala" di sini berarti **selama halaman terbuka saja**.

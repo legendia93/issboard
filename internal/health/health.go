@@ -182,6 +182,22 @@ func evalSmart(r collector.SmartReport) []Finding {
 	}
 
 	for _, d := range r.Disks {
+		// 🔴 Disk yang sedang tidur tidak melaporkan APA PUN, dan itu memang
+		// disengaja: pengumpulnya memakai `smartctl -n standby` supaya disk
+		// yang tidur dibiarkan tidur (design.md §3.3). Hasilnya seluruh field
+		// bernilai kosong — termasuk `passed`, yang kosongnya berarti false.
+		//
+		// Membaca itu sebagai "SMART gagal" adalah kesalahan yang sama dengan
+		// membaca suhu 0 sebagai dingin: KETIADAAN data diperlakukan sebagai
+		// data buruk. Di mesin sungguhan ini langsung memunculkan satu alarm
+		// KRITIS palsu pada menit pertama — dan alarm palsu di hari pertama
+		// adalah cara tercepat membuat orang berhenti memercayai alatnya.
+		//
+		// Kalau timer pengumpulnya sendiri yang mati, itu tertangkap terpisah
+		// oleh r.Stale di atas.
+		if d.Standby {
+			continue
+		}
 		if !d.Passed {
 			f = append(f, Finding{Crit, "smart.failed." + d.Device, "SMART gagal",
 				d.Device + " (" + d.Model + ") melaporkan tidak PASSED", d.Device})

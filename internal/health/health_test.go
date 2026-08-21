@@ -149,6 +149,22 @@ func TestEvaluateHostSehatSunyi(t *testing.T) {
 	}
 }
 
+// 🔴 Disk yang tidur tidak melaporkan APA PUN — termasuk `passed`, yang
+// kosongnya berarti false. Di server sungguhan ini memunculkan alarm KRITIS
+// palsu "SMART gagal" pada menit pertama.
+func TestDiskTidurTidakPernahJadiTemuan(t *testing.T) {
+	s := collector.Snapshot{Smart: collector.SmartReport{
+		WrittenAt: time.Now(),
+		Disks: []collector.SmartDisk{{
+			Device: "/dev/sda", Standby: true,
+			Passed: false, Temperature: 0, Reallocated: 0, PendingSect: 0,
+		}},
+	}}
+	if fs := Evaluate(s); len(fs) != 0 {
+		t.Errorf("disk tidur tidak boleh menghasilkan temuan apa pun: %+v", fs)
+	}
+}
+
 // 🔴 Disk yang tidur melaporkan suhu 0. Kalau 0 dibaca sebagai angka, disk
 // tidur akan terlihat dingin — dan yang lebih buruk, aturan suhu jadi tidak
 // pernah bisa dipercaya.
