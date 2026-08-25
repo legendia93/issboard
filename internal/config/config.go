@@ -30,6 +30,16 @@ type Config struct {
 	// Pools yang ditampilkan. Kosong = deteksi otomatis lewat `zpool list`.
 	Pools []string
 
+	// SnapPolicyFile adalah berkas kebijakan snapshot (format sanoid) yang
+	// dibandingkan dengan dataset nyata. Berkas yang tidak ada mematikan
+	// seluruh aturan cakupan snapshot — itu perilaku yang benar untuk mesin
+	// yang memang tidak memakai snapshot terkelola.
+	SnapPolicyFile string
+
+	// SnapExempt: dataset yang sengaja boleh tidak tercakup kebijakan.
+	// Pola `pool/data/*` ikut mencakup keturunannya.
+	SnapExempt []string
+
 	// --- Di bawah ini hanya dipakai issboard-agent (unit bertimer terpisah).
 	//
 	// 🔴 issboard sendiri TIDAK PERNAH memakainya untuk mengirim apa pun.
@@ -76,6 +86,8 @@ func Default() Config {
 		IdleTimeout:  5 * time.Minute,
 		SmartCache:   "/var/cache/issboard/smart.json",
 		DockerSocket: "/var/run/docker.sock",
+
+		SnapPolicyFile: "/etc/sanoid/sanoid.conf",
 
 		HistoryFile: "/var/lib/issboard/history.json",
 		AlertState:  "/var/lib/issboard/alert-state.json",
@@ -126,6 +138,10 @@ func Load(path string) (Config, error) {
 			c.SmartCache = val
 		case "docker_socket":
 			c.DockerSocket = val
+		case "snapshot_policy":
+			c.SnapPolicyFile = val
+		case "snapshot_exempt":
+			c.SnapExempt = splitList(val)
 		case "demo":
 			c.Demo = val == "true" || val == "yes" || val == "1"
 		case "history_file":
@@ -149,12 +165,7 @@ func Load(path string) (Config, error) {
 		case "telegram_chat_id":
 			c.TelegramChatID = val
 		case "pools":
-			c.Pools = nil
-			for _, p := range strings.Split(val, ",") {
-				if p = strings.TrimSpace(p); p != "" {
-					c.Pools = append(c.Pools, p)
-				}
-			}
+			c.Pools = splitList(val)
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -162,6 +173,16 @@ func Load(path string) (Config, error) {
 	}
 	c.applyEnv()
 	return c, nil
+}
+
+func splitList(val string) []string {
+	var out []string
+	for _, p := range strings.Split(val, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // applyEnv membiarkan variabel lingkungan menimpa berkas config.

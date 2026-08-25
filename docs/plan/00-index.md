@@ -34,9 +34,17 @@ Ditetapkan 18 Agustus 2026:
 | 3 | [`03-sparkline.md`](03-sparkline.md) — grafik mengisi ruang fase 1 | ✅ selesai |
 | 4 | [`04-distribusi.md`](04-distribusi.md) — test, `.deb`, Docker, multi-distro | ✅ selesai |
 | 5 | [`05-pemasangan.md`](05-pemasangan.md) — pasang di mesin sungguhan | ✅ selesai |
+| 6 | [`06-kebijakan-snapshot.md`](06-kebijakan-snapshot.md) — cakupan & umur snapshot | ✅ selesai |
 
 Keempat fase yang direncanakan sudah selesai, dan issboard **sudah berjalan di
 host sungguhan** sejak 21 Agustus 2026.
+
+Fase 6 mengerjakan item pertama dari daftar "di luar fase" di bawah, dan jadi
+fase pertama yang aturannya diuji lawan data host sungguhan **selagi** ditulis,
+bukan sesudahnya. Hasilnya di [`06-kebijakan-snapshot.md`](06-kebijakan-snapshot.md):
+21 dataset diperiksa, **nol temuan palsu**, satu temuan sungguhan — 84 GiB yang
+tidak tercakup aturan snapshot apa pun dan tidak pernah disebut alat lain mana
+pun di mesin itu.
 
 Fase 5 tidak ada di rencana awal. Ia ditambahkan setelah kenyataan
 membuktikannya perlu: pemasangan pertama menemukan **enam cacat** yang tidak
@@ -49,7 +57,9 @@ dijadwalkan, dan sebagiannya menunggu keputusan, bukan menunggu waktu.
 
 Dari `design.md` bagian 10, masih menunggu:
 
-- Perbandingan konfigurasi snapshot (mis. `sanoid.conf`) dengan dataset nyata
+- ~~Perbandingan konfigurasi snapshot dengan dataset nyata~~ — selesai di fase 6
 - Panel versi app + deteksi drift antara config dan container yang jalan
 - Fase arsip & unduhan backup
 - Autentikasi — **wajib ada sebelum endpoint bermutasi pertama**, bukan sesudah
+- Replikasi: snapshot yang ada tapi tidak pernah pergi ke luar mesin tetap
+  satu disk dari hilang (muncul dari fase 6)

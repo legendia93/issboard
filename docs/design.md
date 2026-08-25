@@ -474,10 +474,52 @@ Yang **belum diuji** dicatat apa adanya di [`distro.md`](distro.md) dan di
 tiap berkas rencana — notifikasi yang benar-benar terkirim, `alert_repeat` 24
 jam, SELinux enforcing, Podman, dan arsitektur selain amd64.
 
+Fase 6 (25 Agustus 2026) menambahkan **perbandingan kebijakan snapshot dengan
+dataset nyata** — lihat bagian 11.
+
 Rencana yang sedang berjalan — beserta urutannya — ada di
 [`plan/`](plan/00-index.md). Ringkasnya yang belum:
 
-- Perbandingan konfigurasi snapshot (mis. `sanoid.conf`) dengan dataset nyata
 - Panel versi app + deteksi drift antara config dan container yang jalan
 - Fase arsip & unduhan backup
 - Autentikasi (lihat bagian 8)
+
+## 11. Kebijakan snapshot vs dataset nyata
+
+Ditambahkan fase 6. Dua kondisi yang **diam-diam merusak** dan tidak dijawab
+alat lain mana pun:
+
+1. **Dataset yang tidak tercakup aturan snapshot apa pun.** Dataset baru tidak
+   ikut sendiri ke berkas kebijakan, dan tidak ada satu pun pesan saat itu
+   terjadi. Yang tidak terlindungi terlihat persis sama dengan yang
+   terlindungi, sampai hari orang membutuhkan snapshot-nya.
+2. **Dataset yang tercakup tapi snapshot-nya berhenti.** Timer bisa `active`
+   tanpa menghasilkan apa pun.
+
+issboard hanya **membaca** berkas kebijakannya (format sanoid). Ia tidak
+memanggil sanoid, tidak membuat snapshot, dan tidak peduli apakah sanoid
+terpasang. Yang dibandingkan adalah *yang tertulis* lawan *yang ada di ZFS* —
+dua sumber yang bisa berbeda tanpa satu pun dari keduanya error, dan justru
+karena itu bedanya tidak pernah muncul sendiri.
+
+### 11.1 Tiga hal yang menjaganya tidak jadi kebisingan
+
+**Ambangnya diturunkan dari retensi yang tertulis, bukan angka tetap.** Dataset
+dengan `hourly = 0` memang harian; menilainya dengan ambang per jam menandai
+dataset sehat sebagai bermasalah. Di host uji, satu ambang tetap "6 jam" akan
+menghasilkan enam temuan palsu sekaligus. Yang menentukan bukan selera penulis
+aturan, tapi apa yang diminta berkasnya sendiri.
+
+**Ukuran memisahkan wadah dari data.** `used` sebuah dataset induk memuat
+keturunannya, jadi aturannya memakai `usedbydataset` dengan ambang 1 GiB.
+Dataset wadah memang tidak perlu tercakup — kebijakannya menargetkan
+anak-anaknya.
+
+**Berkas yang tidak ada mematikan seluruh aturan.** Mesin tanpa snapshot
+terkelola bukan mesin yang seluruh datasetnya bermasalah. Ini penerapan
+langsung dari "ketiadaan data bukan data buruk" (§10), dan penjaga yang paling
+penting di bagian ini.
+
+Ditambah `snapshot_exempt`, supaya satu temuan bisa dimatikan dengan sadar.
+Aturan yang pasti punya kekecualian sah tapi tidak menyediakan tempat
+menuliskannya akan dimatikan seluruhnya, bukan sebagian.

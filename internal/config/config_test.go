@@ -149,3 +149,29 @@ func TestDefaultMasukAkal(t *testing.T) {
 		t.Errorf("bawaan notify_min_level harus warn, dapat %q", d.NotifyMinLevel)
 	}
 }
+
+func TestKebijakanSnapshot(t *testing.T) {
+	c, err := Load(tulis(t, `
+snapshot_policy: /etc/lain/sanoid.conf
+snapshot_exempt: kolam/rekaman/*, kolam/scratch ,
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SnapPolicyFile != "/etc/lain/sanoid.conf" {
+		t.Errorf("snapshot_policy: dapat %q", c.SnapPolicyFile)
+	}
+	if len(c.SnapExempt) != 2 || c.SnapExempt[0] != "kolam/rekaman/*" || c.SnapExempt[1] != "kolam/scratch" {
+		t.Errorf("snapshot_exempt: dapat %q", c.SnapExempt)
+	}
+
+	// Bawaannya harus menunjuk ke jalur sanoid yang lazim, dan TIDAK ada
+	// pengecualian bawaan: pengecualian harus selalu keputusan sadar admin.
+	d := Default()
+	if d.SnapPolicyFile == "" {
+		t.Error("snapshot_policy harus punya bawaan")
+	}
+	if len(d.SnapExempt) != 0 {
+		t.Errorf("tidak boleh ada pengecualian bawaan, dapat %q", d.SnapExempt)
+	}
+}

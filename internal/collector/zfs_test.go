@@ -169,22 +169,38 @@ func TestParsePoolStatusBentukScan(t *testing.T) {
 }
 
 func TestParseDatasetsDanSnapshot(t *testing.T) {
-	counts := parseSnapshotCounts("kolam/app@harian-1\nkolam/app@harian-2\nkolam/db@jam-1\n")
-	if counts["kolam/app"] != 2 || counts["kolam/db"] != 1 {
-		t.Fatalf("hitungan snapshot salah: %v", counts)
+	// Urutan sengaja diacak: keluaran `zfs list` tidak menjamin urutan, dan
+	// yang dicari adalah snapshot TERBARU, bukan yang terakhir tercetak.
+	snaps := parseSnapshotSummary(
+		"kolam/app@harian-1\t1787000000\n" +
+			"kolam/app@harian-3\t1787600000\n" +
+			"kolam/app@harian-2\t1787300000\n" +
+			"kolam/db@jam-1\t1787650000\n")
+	if snaps["kolam/app"].count != 2+1 || snaps["kolam/db"].count != 1 {
+		t.Fatalf("hitungan snapshot salah: %+v", snaps)
+	}
+	if got := snaps["kolam/app"].last.Unix(); got != 1787600000 {
+		t.Errorf("snapshot terakhir mau 1787600000, dapat %d — melaporkan perlindungan lebih muda dari kenyataan", got)
 	}
 
-	ds := parseDatasets("kolam/app\t225485783040\t1245540515840\t/srv/app\n"+
-		"kolam/db\t103079215104\t1245540515840\t/srv/db\n", counts)
+	ds := parseDatasets("kolam/app\t225485783040\t1245540515840\t/srv/app\t225000000000\n"+
+		"kolam/db\t103079215104\t1245540515840\t/srv/db\t103000000000\n", snaps)
 	if len(ds) != 2 {
 		t.Fatalf("mau 2 dataset, dapat %d", len(ds))
 	}
-	if ds[0].SnapshotCount != 2 || ds[0].Mountpoint != "/srv/app" {
+	if ds[0].SnapshotCount != 3 || ds[0].Mountpoint != "/srv/app" || ds[0].UsedByDataset != 225000000000 {
 		t.Errorf("dataset pertama salah: %+v", ds[0])
 	}
-	// Dataset tanpa snapshot harus 0, bukan hilang dari daftar.
-	kosong := parseDatasets("kolam/tmp\t1\t2\t-\n", counts)
-	if len(kosong) != 1 || kosong[0].SnapshotCount != 0 {
+	// Dataset tanpa snapshot harus 0 dan LastSnapshot nol — bukan hilang dari
+	// daftar, dan bukan pula waktu sekarang.
+	kosong := parseDatasets("kolam/tmp\t1\t2\t-\t1\n", snaps)
+	if len(kosong) != 1 || kosong[0].SnapshotCount != 0 || kosong[0].LastSnapshot != nil {
 		t.Errorf("dataset tanpa snapshot salah: %+v", kosong)
+	}
+
+	// ZFS lama tanpa kolom usedbydataset tidak boleh membuat barisnya hilang.
+	lama := parseDatasets("kolam/app\t1\t2\t/srv/app\n", snaps)
+	if len(lama) != 1 || lama[0].UsedByDataset != 0 {
+		t.Errorf("baris tanpa kolom kelima salah: %+v", lama)
 	}
 }

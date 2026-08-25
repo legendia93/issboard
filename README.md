@@ -5,8 +5,9 @@ satu binary Go statis, frontend ikut ter-*embed*, tanpa runtime apa pun di
 server. Read-only di v1.
 
 Yang ditampilkan: pool & dataset ZFS (termasuk **apakah pool pernah di-scrub**
-dan **apakah benar-benar redundan**), ringkasan SMART tiap disk, daftar
-container beserta port yang ter-*publish*, dan beban host + ARC.
+dan **apakah benar-benar redundan**), **kebijakan snapshot dibandingkan dengan
+dataset yang benar-benar ada**, ringkasan SMART tiap disk, daftar container
+beserta port yang ter-*publish*, dan beban host + ARC.
 
 Di atas semuanya ada **satu vonis**: sehat, atau sekian hal yang perlu diurus —
 supaya pertanyaan yang sebenarnya dicari terjawab tanpa membaca satu kartu pun.
@@ -86,6 +87,41 @@ hanya untuk kata.
 Dirancang untuk layar HP lebih dulu — itu cara host ini paling sering dilihat.
 Tidak ada aset dari luar: font ikut ter-*embed*, dan halaman disajikan dengan
 `Content-Security-Policy: default-src 'self'`.
+
+## Kebijakan snapshot
+
+Dua pertanyaan yang tidak dijawab Cockpit maupun Portainer, dan dua-duanya
+diam kalau jawabannya buruk:
+
+1. **Dataset mana yang tidak tercakup aturan snapshot apa pun.** Dataset baru
+   tidak ikut sendiri ke `sanoid.conf`. Yang membuatnya berbahaya bukan
+   kelalaiannya, tapi tidak adanya satu pun pesan saat itu terjadi: dataset
+   yang tidak terlindungi terlihat persis sama dengan yang terlindungi, sampai
+   hari orang membutuhkan snapshot-nya.
+2. **Dataset yang tercakup tapi snapshot-nya sudah berhenti.** Timer bisa saja
+   `active` sementara tidak menghasilkan apa pun sama sekali.
+
+issboard hanya **membaca** `sanoid.conf`; ia tidak pernah memanggil sanoid dan
+tidak pernah membuat snapshot. Yang dibandingkan adalah *apa yang tertulis*
+lawan *apa yang ada di ZFS*.
+
+Ambang "sudah terlambat" **diturunkan dari retensi yang tertulis**, bukan dari
+satu angka tetap. Dataset dengan `hourly = 0` memang harian, dan menilainya
+dengan ambang per jam akan menandai dataset sehat sebagai bermasalah — aturan
+yang menyala untuk keadaan normal adalah cara tercepat membuat orang berhenti
+membaca seluruh daftarnya.
+
+Berkas yang tidak ada mematikan seluruh aturan ini. Mesin tanpa snapshot
+terkelola bukan mesin yang seluruh datasetnya bermasalah.
+
+```yaml
+snapshot_policy: /etc/sanoid/sanoid.conf
+# snapshot_exempt: kolam/rekaman/*, kolam/scratch
+```
+
+`snapshot_exempt` ada supaya satu temuan bisa dimatikan **dengan sadar** —
+scratch, rekaman CCTV, apa pun yang dilindungi cara lain. Tanpa jalan itu,
+orang mematikan seluruh daftarnya.
 
 ## Membangun
 
@@ -264,7 +300,7 @@ adalah satu-satunya tempat hal itu bisa ketahuan.
 | Endpoint | Isi |
 |---|---|
 | `GET /api/v1/health` | liveness, tanpa mengumpulkan apa pun |
-| `GET /api/v1/status` | seluruh snapshot: host, pools, datasets, containers, smart, plus `verdict` & `findings[]` |
+| `GET /api/v1/status` | seluruh snapshot: host, pools, datasets (termasuk kebijakan snapshot per-dataset), containers, smart, plus `verdict` & `findings[]` |
 | `GET /api/v1/history` | ring buffer dua lapis yang ditulis `issboard-agent`; membaca berkas, tidak mengumpulkan apa pun |
 
 Kegagalan per-bagian muncul di `errors[]`, bukan menggagalkan seluruh respons —
@@ -275,6 +311,12 @@ permintaan yang kebetulan mengambil ulang.
 notifikasi nanti memakai aturan yang persis sama. Tiap temuan punya `key` yang
 stabil untuk de-duplikasi alert.
 
+Field yang ketiadaannya berarti sesuatu **dihilangkan**, bukan dikirim sebagai
+nilai nol: `last_snapshot` tidak ada berarti dataset itu belum pernah punya
+snapshot. Waktu nol yang terkirim apa adanya (`0001-01-01T00:00:00Z`) akan
+dibaca penerima sebagai tanggal sungguhan — dan `omitempty` tidak berlaku
+untuk struct, jadi ini dikunci test.
+
 ## Test
 
 ```bash
@@ -284,14 +326,20 @@ go test ./...
 Yang diuji lebih dulu adalah **parser**, karena di situlah data dunia nyata
 paling sering mengejutkan: `zpool list`/`zpool status` (termasuk membedakan
 **mirror dari stripe**, dan baris `scan:` dalam berbagai bentuk), pembacaan
-cache SMART beserta deteksi basi, dan JSON Docker (network kosong, port
-`0.0.0.0`, healthcheck yang cuma menempel di teks status).
+cache SMART beserta deteksi basi, JSON Docker (network kosong, port `0.0.0.0`,
+healthcheck yang cuma menempel di teks status), dan `sanoid.conf` (template
+yang saling menimpa, rekursi, bagian paling spesifik yang harus menang).
 
 Selain itu: seluruh aturan vonis di `internal/health` — dengan **data mode demo
 sebagai fixture**, karena data itu memang dibuat memuat setiap kondisi sakit —
 serta ring buffer riwayat dan mesin de-duplikasi alert, termasuk jalur yang
 paling mudah salah: kiriman gagal harus dicoba lagi, dan siklus yang
 pengumpulannya error tidak boleh pernah melaporkan "pulih".
+
+Sebagian test justru menjaga aturan agar **tetap diam**: host sehat tanpa
+temuan, disk yang tidur tidak pernah jadi temuan, dan dataset harian berumur
+9,7 jam tidak boleh terbaca terlambat. Aturan yang menyala untuk keadaan
+normal melatih orang mengabaikan seluruh daftarnya.
 
 ## Lisensi
 

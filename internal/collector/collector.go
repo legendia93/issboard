@@ -19,8 +19,12 @@ type Snapshot struct {
 	Pools       []Pool      `json:"pools"`
 	Datasets    []Dataset   `json:"datasets"`
 	Containers  []Container `json:"containers"`
-	Smart       SmartReport `json:"smart"`
-	Errors      []string    `json:"errors,omitempty"`
+	// SnapPolicy hanya membawa asal-usulnya: aturan per-dataset sudah
+	// ditempelkan ke tiap Dataset. Present=false membuat seluruh aturan
+	// cakupan snapshot diam — lihat SnapPolicySet.
+	SnapPolicy SnapPolicySet `json:"snap_policy"`
+	Smart      SmartReport   `json:"smart"`
+	Errors     []string      `json:"errors,omitempty"`
 }
 
 // Cache menyimpan hasil per-bagian dengan TTL masing-masing. Interval berbeda
@@ -35,6 +39,11 @@ type Cache struct {
 	host       cached[Host]
 	smart      cached[SmartReport]
 	system     cached[System]
+
+	// snapPolicy ikut umur cache datasets: keduanya diisi sekali jalan, dan
+	// memisahkan TTL-nya cuma menciptakan jendela saat dataset sudah tahu
+	// kebijakannya sementara halaman belum tahu berkasnya ada.
+	snapPolicy SnapPolicySet
 
 	// prevCPU adalah cuplikan /proc/stat sebelumnya. Pemakaian CPU tidak bisa
 	// dibaca sekali jalan — hanya selisih dua cuplikan yang berarti.
@@ -81,6 +90,11 @@ type Options struct {
 	SmartCache   string
 	DockerSocket string
 	Pools        []string
+	// SnapPolicyFile adalah berkas kebijakan snapshot (format sanoid).
+	// Kosong atau tidak ada = perbandingan cakupan dimatikan seluruhnya.
+	SnapPolicyFile string
+	// SnapExempt: dataset yang sengaja tidak perlu tercakup kebijakan.
+	SnapExempt []string
 }
 
 // Collect mengembalikan snapshot, memakai cache di mana masih segar.
@@ -119,9 +133,12 @@ func (c *Cache) Collect(ctx context.Context, o Options) Snapshot {
 	note(c.pools.err)
 
 	if !c.datasets.fresh() {
-		c.datasets.set(CollectDatasets(ctx))
+		ds, pol, err := CollectDatasets(ctx, o)
+		c.datasets.set(ds, err)
+		c.snapPolicy = pol
 	}
 	s.Datasets = c.datasets.val
+	s.SnapPolicy = c.snapPolicy
 	note(c.datasets.err)
 
 	if !c.containers.fresh() {

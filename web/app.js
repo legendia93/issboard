@@ -330,7 +330,7 @@ function render(d) {
   renderPools(d.pools, worst);
   renderDisks(d.smart, worst);
   renderContainers(d.containers, worst);
-  renderDatasets(d.datasets);
+  renderDatasets(d.datasets, d.snap_policy, worst);
   renderErrors(d);
 }
 
@@ -736,7 +736,7 @@ function renderContainers(cs, worst) {
   box.append(el('div', { class: 'n-card' }, rows));
 }
 
-function renderDatasets(ds) {
+function renderDatasets(ds, pol, worst) {
   const box = $('datasets');
   clear(box);
   if (!ds || !ds.length) {
@@ -744,18 +744,55 @@ function renderDatasets(ds) {
     return;
   }
 
+  const punyaKebijakan = !!(pol && pol.present);
+
   const rows = el('div', { class: 'rows' });
   for (const d of ds) {
-    // Dataset tanpa snapshot bukan otomatis salah — ada yang memang tidak
-    // perlu. Karena itu ditandai redup, bukan dijadikan temuan.
-    const tanpaSnap = d.snapshot_count === 0;
+    const p = d.snap_policy;
+    const umur = d.last_snapshot ? relTime(d.last_snapshot) : 'belum pernah';
+
+    // Warna baris mengikuti aturan yang sama dengan daftar temuan, dan
+    // dihitung dari sumber yang sama — bukan aturan kedua yang ditulis ulang
+    // di JavaScript. Dua salinan aturan di dua bahasa akan berbeda pelan-pelan
+    // (docs/design.md §9.1); yang di sini cuma menerjemahkan hasilnya.
+    const temuan = worst.get(d.name);
+    let dot = 'n-dot-off';
+    if (temuan === 'crit') dot = 'n-dot-crit';
+    else if (temuan === 'warn') dot = 'n-dot-warn';
+    else if (d.snapshot_count > 0) dot = 'n-dot-ok';
+
+    // Pil kebijakan menjawab "kenapa dataset ini ikut / tidak ikut" tanpa
+    // harus membuka berkas konfigurasi lewat SSH. Ia hanya muncul kalau ada
+    // berkas kebijakan untuk dibandingkan — di mesin tanpa snapshot terkelola,
+    // "tanpa kebijakan" di tiap baris cuma kebisingan yang selalu benar.
+    let kebijakan = null;
+    if (punyaKebijakan) {
+      if (p) {
+        kebijakan = el('span', { class: 'n-pill', title: `bagian [${p.section}]` +
+          (p.template ? ` · template ${p.template}` : '') +
+          ` · simpan ${p.hourly}/jam ${p.daily}/hari ${p.monthly}/bulan` +
+          (p.autosnap ? '' : ' · autosnap mati') }, p.autosnap ? 'auto' : 'auto mati');
+      } else if (d.snap_exempt) {
+        kebijakan = el('span', { class: 'n-pill', title:
+          'dikecualikan lewat snapshot_exempt di config' }, 'dikecualikan');
+      } else {
+        // Warna alarm HANYA kalau aturannya sendiri menganggapnya temuan.
+        // Dataset wadah tidak tercakup apa pun dan memang tidak perlu — pil
+        // oranye di baris semacam itu adalah alarm untuk keadaan normal,
+        // dan itu cara tercepat membuat orang berhenti membaca warnanya.
+        kebijakan = el('span', { class: 'n-pill' + (temuan ? ' n-pill-warn' : ''), title:
+          `tidak masuk bagian mana pun di ${pol.source || 'berkas kebijakan'}` }, 'tanpa kebijakan');
+      }
+    }
+
     rows.append(el('div', { class: 'row' },
-      el('span', { class: 'n-dot ' + (tanpaSnap ? 'n-dot-off' : 'n-dot-ok') }),
+      el('span', { class: 'n-dot ' + dot }),
       el('div', { class: 'rname' }, d.name),
       el('div', { class: 'rmeta' }, d.mountpoint || '—'),
       el('div', { class: 'rtail' },
         el('span', { class: 'n-pill' }, bytes(d.used_bytes)),
-        el('span', { class: 'n-pill' }, `${d.snapshot_count} snap`))));
+        kebijakan,
+        el('span', { class: 'n-pill', title: `${d.snapshot_count} snapshot` }, umur))));
   }
   box.append(el('div', { class: 'n-card' }, rows));
 }

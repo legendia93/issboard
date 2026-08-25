@@ -51,6 +51,27 @@ const (
 	scrubStaleAfter = 35 * 24 * time.Hour // sebulan sekali + kelonggaran
 	diskTempWarnC   = 50
 	diskTempCritC   = 60
+
+	// snapCoverMinBytes: di bawah ini, dataset yang tidak tercakup kebijakan
+	// snapshot TIDAK jadi temuan.
+	//
+	// Bukan angka kenyamanan — angka ini yang menentukan aturannya berguna
+	// atau tidak. Dataset induk hanyalah wadah: `pool/prod` yang menampung
+	// sepuluh anak berisi 122 KB miliknya sendiri, dan kebijakan snapshot
+	// yang benar memang menargetkan anak-anaknya. Menandai tiap wadah berarti
+	// separuh daftar temuan berisi hal yang tidak salah — dan daftar semacam
+	// itu berhenti dibaca (docs/plan/05-pemasangan.md, cacat #1).
+	//
+	// Yang tersisa di atas ambang ini adalah dataset yang benar-benar
+	// menyimpan sesuatu tanpa satu pun aturan yang melindunginya.
+	snapCoverMinBytes = 1 << 30 // 1 GiB
+
+	// snapStaleGrace memberi kelonggaran di atas jarak yang seharusnya:
+	// pengumpulnya bertimer, jadi snapshot "tiap jam" wajar terlambat
+	// beberapa menit tanpa ada yang rusak.
+	snapStaleGrace = time.Hour
+	// snapDeadFactor: sudah bukan telat lagi, tapi berhenti.
+	snapDeadFactor = 8
 )
 
 // Evaluate mengembalikan temuan, terurut: kritis dulu.
@@ -59,6 +80,7 @@ func Evaluate(s collector.Snapshot) []Finding {
 	f = append(f, evalPools(s.Pools)...)
 	f = append(f, evalSmart(s.Smart)...)
 	f = append(f, evalContainers(s.Containers)...)
+	f = append(f, evalSnapshots(s)...)
 	return sortByLevel(f)
 }
 
@@ -223,6 +245,129 @@ func evalSmart(r collector.SmartReport) []Finding {
 		}
 	}
 	return f
+}
+
+// evalSnapshots membandingkan berkas kebijakan snapshot dengan dataset nyata.
+//
+// Dua pertanyaan yang tidak dijawab alat lain mana pun, dan dua-duanya diam
+// kalau jawabannya buruk: "apakah ada data yang tidak dilindungi apa pun?"
+// dan "apakah perlindungan yang tertulis itu masih benar-benar berjalan?"
+//
+// 🔴 Seluruhnya diam kalau berkas kebijakannya tidak ada. Mesin tanpa
+// snapshot terkelola bukan mesin yang seluruh datasetnya bermasalah — dan
+// aturan yang menyala satu kali per dataset di menit pertama akan membuat
+// orang mematikan seluruh daftar temuannya. Ketiadaan data bukan data buruk.
+func evalSnapshots(s collector.Snapshot) []Finding {
+	if !s.SnapPolicy.Present {
+		return nil
+	}
+
+	var f []Finding
+	for _, d := range s.Datasets {
+		if d.SnapExempt {
+			continue
+		}
+
+		if d.SnapPolicy == nil {
+			// Dataset wadah dan dataset kecil sengaja tidak dihitung; lihat
+			// snapCoverMinBytes.
+			if d.UsedByDataset >= snapCoverMinBytes {
+				f = append(f, Finding{Warn, "snap.uncovered." + d.Name,
+					"Dataset tidak tercakup kebijakan snapshot",
+					fmt.Sprintf("%s berisi %s dan tidak masuk bagian mana pun di %s — dataset baru tidak ikut sendiri, dan tidak ada yang memberi tahu",
+						d.Name, humanBytes(d.UsedByDataset), s.SnapPolicy.Source), d.Name})
+			}
+			continue
+		}
+
+		// autosnap = no adalah keputusan yang sudah diambil orang dengan
+		// sadar, tertulis di berkasnya. Menanyakannya lagi tiap menit bukan
+		// kewaspadaan, itu cuma berisik.
+		p := d.SnapPolicy
+		if !p.Autosnap {
+			continue
+		}
+		want := snapInterval(p)
+		if want == 0 {
+			continue // autosnap menyala tapi tidak ada retensi apa pun
+		}
+
+		// Tercakup, autosnap menyala, retensi tertulis — dan tetap nol
+		// snapshot. Ini BUKAN ketiadaan data yang dinilai sebagai data buruk:
+		// berkasnya sendiri yang mengklaim dataset ini di-snapshot, jadi
+		// nol adalah kontradiksi, bukan kekosongan.
+		if d.LastSnapshot == nil {
+			f = append(f, Finding{Crit, "snap.never." + d.Name,
+				"Tercakup kebijakan, tapi belum pernah ter-snapshot",
+				fmt.Sprintf("%s ada di bagian [%s] dengan autosnap menyala, dan tidak punya satu pun snapshot — yang tertulis tidak sama dengan yang terjadi",
+					d.Name, p.Section), d.Name})
+			continue
+		}
+
+		age := time.Since(*d.LastSnapshot)
+		switch {
+		case age > want*snapDeadFactor:
+			f = append(f, Finding{Crit, "snap.stale." + d.Name, "Snapshot berhenti",
+				fmt.Sprintf("%s: terakhir %s lalu, seharusnya tiap %s — timernya bisa saja masih `active` tanpa menghasilkan apa pun",
+					d.Name, roundAge(age), roundAge(want)), d.Name})
+		case age > want*2+snapStaleGrace:
+			f = append(f, Finding{Warn, "snap.stale." + d.Name, "Snapshot terlambat",
+				fmt.Sprintf("%s: terakhir %s lalu, seharusnya tiap %s",
+					d.Name, roundAge(age), roundAge(want)), d.Name})
+		}
+	}
+	return f
+}
+
+// snapInterval menurunkan "seharusnya tiap berapa lama" dari retensi yang
+// tertulis, bukan dari satu ambang tetap.
+//
+// Ini bagian yang paling mudah salah. Ambang tetap 6 jam akan menandai enam
+// dataset SEHAT sekaligus di host yang kebijakannya memang harian — dan
+// aturan yang menyala untuk keadaan normal adalah cara tercepat membuat
+// seluruh daftar temuan diabaikan. Yang menentukan bukan selera kita, tapi
+// apa yang diminta berkasnya sendiri.
+func snapInterval(p *collector.SnapPolicy) time.Duration {
+	switch {
+	case p.Hourly > 0:
+		return time.Hour
+	case p.Daily > 0:
+		return 24 * time.Hour
+	case p.Monthly > 0:
+		return 30 * 24 * time.Hour
+	case p.Yearly > 0:
+		return 365 * 24 * time.Hour
+	}
+	return 0
+}
+
+// roundAge menulis durasi dengan satuan yang wajar dibaca manusia. "8 hari"
+// terbaca sekali lihat; "192h0m0s" harus dihitung dulu, dan temuan yang harus
+// dihitung dulu akan dilewati orang yang sedang buru-buru.
+func roundAge(d time.Duration) string {
+	switch {
+	case d >= 48*time.Hour:
+		return fmt.Sprintf("%d hari", int(d.Hours()/24))
+	case d >= 2*time.Hour:
+		return fmt.Sprintf("%d jam", int(d.Hours()))
+	case d >= time.Hour:
+		return "1 jam"
+	default:
+		return fmt.Sprintf("%d menit", int(d.Minutes()))
+	}
+}
+
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 func evalContainers(cs []collector.Container) []Finding {

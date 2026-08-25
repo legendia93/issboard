@@ -27,6 +27,27 @@ docker_socket: /var/run/docker.sock
 # Kosongkan untuk mendeteksi semua pool otomatis, atau daftar dipisah koma.
 # pools: pool-satu, pool-dua
 
+# --- Kebijakan snapshot ---------------------------------------------------
+#
+# Berkas konfigurasi sanoid, dibandingkan dengan dataset yang benar-benar ada.
+# Menjawab dua hal yang tidak muncul sendiri di layar mana pun: dataset yang
+# tidak tercakup aturan apa pun, dan dataset yang tercakup tapi snapshot-nya
+# sudah berhenti.
+#
+# Berkas yang TIDAK ADA mematikan seluruh aturan ini — itu perilaku yang benar
+# untuk mesin yang memang tidak memakai snapshot terkelola. issboard hanya
+# MEMBACA berkasnya; ia tidak pernah memanggil sanoid dan tidak pernah membuat
+# snapshot.
+snapshot_policy: /etc/sanoid/sanoid.conf
+
+# Dataset yang memang tidak perlu tercakup: scratch, rekaman CCTV, apa pun yang
+# dilindungi cara lain. Pola `pool/data/*` ikut mencakup keturunannya; tanpa
+# `/*` yang cocok hanya dataset itu sendiri.
+#
+# Ini ada supaya satu temuan bisa dimatikan dengan sadar. Tanpa jalan itu,
+# orang mematikan SELURUH daftar temuannya.
+# snapshot_exempt: kolam/rekaman/*, kolam/scratch
+
 # --- issboard-agent (unit bertimer terpisah) ------------------------------
 #
 # Hanya dipakai issboard-agent. issboard sendiri tidak pernah mengirim apa pun:

@@ -166,9 +166,11 @@ func collect(ctx context.Context, cfg config.Config) collector.Snapshot {
 	// per-bagian dikumpulkan, supaya agent melihat snapshot yang bentuknya
 	// persis sama dengan yang dilihat dashboard.
 	return collector.NewCache().Collect(ctx, collector.Options{
-		SmartCache:   cfg.SmartCache,
-		DockerSocket: cfg.DockerSocket,
-		Pools:        cfg.Pools,
+		SmartCache:     cfg.SmartCache,
+		DockerSocket:   cfg.DockerSocket,
+		Pools:          cfg.Pools,
+		SnapPolicyFile: cfg.SnapPolicyFile,
+		SnapExempt:     cfg.SnapExempt,
 	})
 }
 

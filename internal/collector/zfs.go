@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Pool struct {
@@ -27,11 +28,32 @@ type Pool struct {
 }
 
 type Dataset struct {
-	Name          string `json:"name"`
-	UsedBytes     int64  `json:"used_bytes"`
-	AvailBytes    int64  `json:"avail_bytes"`
+	Name       string `json:"name"`
+	UsedBytes  int64  `json:"used_bytes"`
+	AvailBytes int64  `json:"avail_bytes"`
+	// UsedByDataset adalah data yang benar-benar duduk DI dataset ini, tanpa
+	// keturunan dan tanpa snapshot. Dipakai untuk membedakan dataset induk
+	// yang cuma wadah — `used`-nya ratusan GB karena anak-anaknya — dari
+	// dataset yang sungguh menyimpan sesuatu. Aturan "tidak tercakup" berdiri
+	// di atas beda itu; memakai `used` akan menandai tiap dataset induk.
+	UsedByDataset int64  `json:"used_by_dataset"`
 	Mountpoint    string `json:"mountpoint"`
 	SnapshotCount int    `json:"snapshot_count"`
+	// LastSnapshot nil berarti dataset ini BELUM PERNAH punya snapshot.
+	//
+	// 🔴 Sengaja pointer, bukan time.Time. `omitempty` TIDAK berlaku untuk
+	// struct: time.Time yang nol tetap terkirim sebagai "0001-01-01T00:00:00Z",
+	// dan penerima mana pun yang cuma memeriksa "ada isinya atau tidak" akan
+	// membacanya sebagai tanggal sungguhan — lalu melaporkan umur snapshot
+	// dalam ratusan ribu hari. Ketiadaan harus terlihat SEBAGAI ketiadaan,
+	// bukan menyamar jadi nilai; ini kesalahan yang sama dengan membaca suhu 0
+	// sebagai dingin (docs/plan/05-pemasangan.md, cacat #2).
+	LastSnapshot *time.Time `json:"last_snapshot,omitempty"`
+	// SnapPolicy nil berarti tidak ada bagian di berkas kebijakan yang
+	// mencakupnya — belum tentu salah, lihat internal/health.
+	SnapPolicy *SnapPolicy `json:"snap_policy,omitempty"`
+	// SnapExempt: dikecualikan dengan sadar lewat config.
+	SnapExempt bool `json:"snap_exempt,omitempty"`
 }
 
 func run(ctx context.Context, name string, args ...string) (string, error) {
@@ -137,16 +159,43 @@ func parsePoolStatus(out string, p *Pool) {
 	}
 }
 
-func CollectDatasets(ctx context.Context) ([]Dataset, error) {
-	out, err := run(ctx, "zfs", "list", "-Hp", "-o", "name,used,avail,mountpoint")
+// CollectDatasets mengembalikan daftar dataset beserta kebijakan snapshot yang
+// berlaku untuk masing-masing. Set kebijakannya ikut dikembalikan karena
+// pemanggil perlu tahu bedanya "tidak tercakup" dan "tidak ada berkas
+// kebijakan sama sekali" — dua hal yang sama-sama menghasilkan SnapPolicy nil.
+func CollectDatasets(ctx context.Context, o Options) ([]Dataset, SnapPolicySet, error) {
+	pol, polErr := LoadSnapPolicy(o.SnapPolicyFile)
+
+	out, err := run(ctx, "zfs", "list", "-Hp", "-o", "name,used,avail,mountpoint,usedbydataset")
 	if err != nil {
-		return nil, err
+		return nil, pol, err
 	}
-	counts, _ := snapshotCounts(ctx)
-	return parseDatasets(out, counts), nil
+	snaps, snapErr := snapshotSummary(ctx)
+
+	ds := parseDatasets(out, snaps)
+	for i := range ds {
+		ds[i].SnapExempt = snapExempt(ds[i].Name, o.SnapExempt)
+		if pol.Present {
+			ds[i].SnapPolicy = pol.For(ds[i].Name)
+		}
+	}
+	// Kegagalan membaca snapshot atau berkas kebijakan tidak boleh menghapus
+	// daftar datasetnya: yang hilang cuma satu kolom, dan itu jauh lebih baik
+	// daripada kartu dataset yang kosong sama sekali. Errornya tetap dilaporkan
+	// supaya halaman mengaku tidak tahu, bukan terlihat sehat karena buta.
+	return ds, pol, firstErr(snapErr, polErr)
 }
 
-func parseDatasets(out string, counts map[string]int) []Dataset {
+func firstErr(errs ...error) error {
+	for _, e := range errs {
+		if e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+func parseDatasets(out string, snaps map[string]snapInfo) []Dataset {
 	var ds []Dataset
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if line == "" {
@@ -156,35 +205,66 @@ func parseDatasets(out string, counts map[string]int) []Dataset {
 		if len(f) < 4 {
 			continue
 		}
-		ds = append(ds, Dataset{
-			Name:          f[0],
-			UsedBytes:     parseInt(f[1]),
-			AvailBytes:    parseInt(f[2]),
-			Mountpoint:    f[3],
-			SnapshotCount: counts[f[0]],
-		})
+		d := Dataset{
+			Name:       f[0],
+			UsedBytes:  parseInt(f[1]),
+			AvailBytes: parseInt(f[2]),
+			Mountpoint: f[3],
+		}
+		if len(f) >= 5 {
+			d.UsedByDataset = parseInt(f[4])
+		}
+		if s, ok := snaps[f[0]]; ok {
+			d.SnapshotCount = s.count
+			if !s.last.IsZero() {
+				at := s.last
+				d.LastSnapshot = &at
+			}
+		}
+		ds = append(ds, d)
 	}
 	return ds
 }
 
-// snapshotCounts memakai satu panggilan untuk seluruh sistem: memanggil
-// `zfs list -t snapshot` per dataset akan jadi puluhan proses per refresh.
-func snapshotCounts(ctx context.Context) (map[string]int, error) {
-	out, err := run(ctx, "zfs", "list", "-Hp", "-t", "snapshot", "-o", "name")
-	if err != nil {
-		return map[string]int{}, err
-	}
-	return parseSnapshotCounts(out), nil
+type snapInfo struct {
+	count int
+	last  time.Time
 }
 
-func parseSnapshotCounts(out string) map[string]int {
-	counts := map[string]int{}
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if ds, _, ok := strings.Cut(line, "@"); ok {
-			counts[ds]++
-		}
+// snapshotSummary memakai satu panggilan untuk seluruh sistem: memanggil
+// `zfs list -t snapshot` per dataset akan jadi puluhan proses per refresh.
+// Di host dengan 653 snapshot satu panggilan ini 73 ms, jadi memindahkannya
+// ke agent tidak diperlukan.
+func snapshotSummary(ctx context.Context) (map[string]snapInfo, error) {
+	out, err := run(ctx, "zfs", "list", "-Hp", "-t", "snapshot", "-o", "name,creation")
+	if err != nil {
+		return map[string]snapInfo{}, err
 	}
-	return counts
+	return parseSnapshotSummary(out), nil
+}
+
+// parseSnapshotSummary mengambil yang TERBARU per dataset, bukan yang terakhir
+// tercetak: urutan keluaran `zfs list` tidak dijamin, dan snapshot yang salah
+// pilih berarti umur perlindungan dilaporkan lebih muda daripada kenyataan —
+// arah kebohongan yang paling berbahaya untuk aturan ini.
+func parseSnapshotSummary(out string) map[string]snapInfo {
+	m := map[string]snapInfo{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		name, created, _ := strings.Cut(line, "\t")
+		ds, _, ok := strings.Cut(name, "@")
+		if !ok {
+			continue
+		}
+		s := m[ds]
+		s.count++
+		if sec := parseInt(created); sec > 0 {
+			if at := time.Unix(sec, 0); at.After(s.last) {
+				s.last = at
+			}
+		}
+		m[ds] = s
+	}
+	return m
 }
 
 func parseInt(s string) int64 {

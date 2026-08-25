@@ -72,9 +72,11 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		snap = collector.DemoSnapshot()
 	} else {
 		snap = s.cache.Collect(r.Context(), collector.Options{
-			SmartCache:   s.cfg.SmartCache,
-			DockerSocket: s.cfg.DockerSocket,
-			Pools:        s.cfg.Pools,
+			SmartCache:     s.cfg.SmartCache,
+			DockerSocket:   s.cfg.DockerSocket,
+			Pools:          s.cfg.Pools,
+			SnapPolicyFile: s.cfg.SnapPolicyFile,
+			SnapExempt:     s.cfg.SnapExempt,
 		})
 	}
 

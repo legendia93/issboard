@@ -88,8 +88,12 @@ pengembangan**, dan itu inti pelajarannya.
   disiapkan, belum dinyalakan. Jalur ntfy pernah diuji lawan server tiruan
   lokal; Telegram belum pernah menyentuh API aslinya.
 - **`alert_repeat` 24 jam belum pernah terpicu** di mesin nyata.
-- **Belum jalan semalaman**, jadi lapis kasar riwayat 24 jam belum terisi penuh
-  dari data sungguhan.
+- ~~Belum jalan semalaman~~ — **terisi penuh per 25 Agustus 2026**: lapis halus
+  60/60 titik (1 jam) dan lapis kasar 48/48 titik (24 jam), seluruhnya data
+  sungguhan. Diperiksa jaraknya, bukan cuma jumlahnya — ring buffer yang penuh
+  belum tentu tanpa lubang: jarak antar titik 60–75 dtk di lapis halus dan
+  1804–1845 dtk di lapis kasar, **nol lompatan**. Agent bertimer memang jalan
+  tiap menit tanpa terlewat, dengan jitter systemd yang wajar.
 - **Cloudflare Tunnel ditunda.** Syaratnya sudah jelas — Cloudflare Access
   harus lebih dulu, lihat `design.md` §8.1. Akses saat ini lewat tailnet.
 - SELinux, Podman, dan arsitektur selain amd64 tetap belum diuji

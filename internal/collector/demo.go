@@ -21,6 +21,8 @@ import (
 //
 // Semua nama di bawah sengaja generik. Jangan pernah menaruh nama mesin nyata
 // di sini: berkas ini publik.
+func ptr[T any](v T) *T { return &v }
+
 func DemoSnapshot() Snapshot {
 	now := time.Now()
 
@@ -31,6 +33,7 @@ func DemoSnapshot() Snapshot {
 	}
 
 	const gib = int64(1) << 30
+	const kib = int64(1) << 10
 
 	return Snapshot{
 		CollectedAt: now,
@@ -89,11 +92,54 @@ func DemoSnapshot() Snapshot {
 				CksumErr:      4,
 			},
 		},
+		// 🔴 Data demo hanya sebaik imajinasi penulisnya — pelajaran yang
+		// sudah dibayar sekali di proyek ini: versi pertama menulis disk
+		// `standby: true` bersama `passed: true`, karena yang mengarangnya
+		// tahu disknya sehat, dan cacatnya baru muncul di mesin sungguhan.
+		//
+		// Karena itu daftar di bawah sengaja memuat KELIMA jalur aturan
+		// snapshot sekaligus, termasuk dua yang tidak boleh jadi temuan:
+		// dataset wadah yang kecil, dan dataset yang dikecualikan dengan
+		// sadar. Aturan yang cuma diuji lawan keadaan sakit tidak pernah
+		// ketahuan menyala untuk keadaan sehat.
+		SnapPolicy: SnapPolicySet{Source: "/etc/sanoid/sanoid.conf", Present: true},
 		Datasets: []Dataset{
-			{Name: "pool-cepat/app", UsedBytes: 210 * gib, AvailBytes: 1160 * gib, Mountpoint: "/srv/app", SnapshotCount: 148},
-			{Name: "pool-cepat/basis-data", UsedBytes: 96 * gib, AvailBytes: 1160 * gib, Mountpoint: "/srv/db", SnapshotCount: 312},
-			{Name: "pool-arsip/rekaman", UsedBytes: 16800 * gib, AvailBytes: 1400 * gib, Mountpoint: "/srv/rekaman", SnapshotCount: 0},
-			{Name: "pool-uji/coba", UsedBytes: 118 * gib, AvailBytes: 380 * gib, Mountpoint: "/srv/coba", SnapshotCount: 2},
+			// Wadah: `used` besar karena anak-anaknya, isinya sendiri nyaris
+			// nol. Tidak tercakup, dan memang TIDAK boleh jadi temuan.
+			{Name: "pool-cepat", UsedBytes: 306 * gib, UsedByDataset: 112 * kib,
+				AvailBytes: 1160 * gib, Mountpoint: "/pool-cepat"},
+
+			// Sehat: tercakup, autosnap menyala, snapshot terakhir 20 menit lalu.
+			{Name: "pool-cepat/app", UsedBytes: 210 * gib, UsedByDataset: 209 * gib,
+				AvailBytes: 1160 * gib, Mountpoint: "/srv/app", SnapshotCount: 148,
+				LastSnapshot: ptr(now.Add(-20 * time.Minute)),
+				SnapPolicy:   &SnapPolicy{Section: "pool-cepat", Template: "prod", Autosnap: true, Hourly: 48, Daily: 30, Monthly: 6}},
+
+			// Terlambat: seharusnya tiap jam, terakhir 5 jam lalu.
+			{Name: "pool-cepat/basis-data", UsedBytes: 96 * gib, UsedByDataset: 94 * gib,
+				AvailBytes: 1160 * gib, Mountpoint: "/srv/db", SnapshotCount: 312,
+				LastSnapshot: ptr(now.Add(-5 * time.Hour)),
+				SnapPolicy:   &SnapPolicy{Section: "pool-cepat", Template: "prod", Autosnap: true, Hourly: 48, Daily: 30, Monthly: 6}},
+
+			// Tidak tercakup apa pun, dan berisi data sungguhan. Inilah lubang
+			// yang tidak diberitahukan alat mana pun: dataset baru tidak ikut
+			// sendiri ke berkas kebijakan.
+			{Name: "pool-cepat/media", UsedBytes: 84 * gib, UsedByDataset: 84 * gib,
+				AvailBytes: 1160 * gib, Mountpoint: "/srv/media", SnapshotCount: 2,
+				LastSnapshot: ptr(now.Add(-11 * 24 * time.Hour))},
+
+			// Dikecualikan dengan sadar lewat config: rekaman yang memang tidak
+			// perlu di-snapshot. Tanpa jalan mematikan satu temuan, orang
+			// mematikan seluruh daftarnya.
+			{Name: "pool-arsip/rekaman", UsedBytes: 16800 * gib, UsedByDataset: 16800 * gib,
+				AvailBytes: 1400 * gib, Mountpoint: "/srv/rekaman", SnapshotCount: 0,
+				SnapExempt: true},
+
+			// Yang tertulis tidak sama dengan yang terjadi: berkasnya mengklaim
+			// dataset ini di-snapshot harian, dan tidak ada satu pun snapshot.
+			{Name: "pool-uji/coba", UsedBytes: 118 * gib, UsedByDataset: 118 * gib,
+				AvailBytes: 380 * gib, Mountpoint: "/srv/coba", SnapshotCount: 0,
+				SnapPolicy: &SnapPolicy{Section: "pool-uji", Template: "arsip", Autosnap: true, Daily: 14, Monthly: 12}},
 		},
 		Containers: []Container{
 			{Name: "web", Image: "demo/web:1.4.2", State: "running", Status: "Up 6 days",
