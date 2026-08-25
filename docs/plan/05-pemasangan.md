@@ -84,10 +84,20 @@ pengembangan**, dan itu inti pelajarannya.
 
 ## Yang masih tersisa
 
-- **Notifikasi belum pernah benar-benar terkirim.** Kanal Telegram sudah
-  disiapkan, belum dinyalakan. Jalur ntfy pernah diuji lawan server tiruan
-  lokal; Telegram belum pernah menyentuh API aslinya.
-- **`alert_repeat` 24 jam belum pernah terpicu** di mesin nyata.
+- ~~Notifikasi belum pernah benar-benar terkirim~~ — **terkirim lewat Telegram
+  sejak 21 Agustus 2026, 14:10.** Lima siklus sebelumnya melaporkan "tidak ada
+  kanal notifikasi yang dikonfigurasi" dan **sengaja tidak menandai sudah
+  dikabari**; begitu token diisi, kondisi yang sedang berlangsung langsung
+  terkirim sekali tanpa menunggu sesuatu memburuk dulu. Keputusan itu ditulis
+  sebagai komentar di `cmd/issboard-agent/main.go` jauh sebelum ada kanal yang
+  bisa membuktikannya, dan ia bekerja persis seperti yang dijanjikan.
+  Jalur ntfy tetap hanya pernah diuji lawan server tiruan lokal.
+- ~~`alert_repeat` 24 jam belum pernah terpicu~~ — **terpicu empat kali**, 22–25
+  Agustus, "5 masih berlangsung". Jaraknya 24j00m04d, 24j00m54d, 24j00m32d,
+  24j00m45d: pengingatnya adalah **lantai, bukan jadwal** — ia menyala pada
+  siklus pertama sesudah 24 jam lewat, jadi jitter timer semenit menumpuk
+  pelan-pelan dan tidak pernah menyusut. Tidak apa-apa untuk pengingat, dan
+  perlu diingat kalau suatu saat ada yang mengharapkannya presisi.
 - ~~Belum jalan semalaman~~ — **terisi penuh per 25 Agustus 2026**: lapis halus
   60/60 titik (1 jam) dan lapis kasar 48/48 titik (24 jam), seluruhnya data
   sungguhan. Diperiksa jaraknya, bukan cuma jumlahnya — ring buffer yang penuh

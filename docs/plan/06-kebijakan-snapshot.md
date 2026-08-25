@@ -1,6 +1,6 @@
 # Fase 6 — Kebijakan snapshot vs dataset nyata
 
-**Status: ✅ selesai** (25 Agustus 2026).
+**Status: ✅ selesai dan terpasang** (25 Agustus 2026).
 
 Fase pertama sesudah pemasangan, dan yang pertama dikerjakan dengan mesin
 sungguhan sudah tersedia untuk diuji **selagi** aturannya ditulis — bukan
@@ -117,11 +117,36 @@ alat lain di mesin itu yang pernah menyebutkannya.
 Enam dataset harian yang akan ditandai salah oleh ambang tetap: **tidak satu
 pun** jadi temuan.
 
+### Lalu dipasang, dan hasilnya sama persis
+
+Terpasang di host sore itu juga (25 Agt, 17:26). Prediksi di atas dibuat lawan
+salinan data; ini hasil lawan mesinnya sendiri:
+
+| | |
+|---|---|
+| `snap_policy.present` | `true` — berkasnya terbaca dari dalam `ProtectSystem=strict`, tanpa penyesuaian unit |
+| Temuan snapshot | **1**, `snap.uncovered.tank-main/media` |
+| Temuan palsu | **0** — enam dataset harian berumur 10,5 jam, tidak satu pun ditandai |
+| Dataset wadah (98 KB, 122 KB, 114 KB) | diam, sesuai ambang |
+| Dashboard vs agent | sepakat; keduanya memakai `internal/health` yang sama |
+
+Dan pada 17:33 temuan itu **terkirim ke Telegram** sebagai "1 baru" — aturan
+yang ditulis siang hari sampai ke HP pemiliknya sore itu juga, lewat jalur yang
+tidak menyalakan daemon apa pun.
+
+Yang perlu dicatat: perintah verifikasi yang pertama diberikan **salah**, bukan
+kodenya. API mencetak JSON ber-indent, jadi keluarannya `"key": "snap…"` dengan
+spasi sesudah titik dua, sementara pola grep-nya ditulis tanpa spasi — ia tidak
+akan pernah cocok, di versi mana pun. Sesaat itu terlihat seperti dashboard dan
+agent tidak sepakat. **Alat verifikasi yang salah menghasilkan gejala yang
+bentuknya persis sama dengan bug**, dan yang membedakannya cuma memeriksa
+alatnya lebih dulu sebelum memeriksa yang diukur.
+
 ## Yang masih tersisa
 
-- **Belum terpasang di host.** Diuji lawan salinan datanya, belum lawan
-  mesinnya sendiri. Pemasangan butuh interaksi karena `sudo` di sana minta
-  kata sandi.
 - Format kebijakan selain sanoid (`zfs-auto-snapshot`, `zrepl`) belum dibaca.
 - `syncoid` / replikasi ke luar mesin belum diperiksa sama sekali: snapshot
   yang ada tapi tidak pernah pergi ke mana-mana tetap satu disk dari hilang.
+- **`tank-main/media` menunggu keputusan**, bukan menunggu kode: masuk
+  `sanoid.conf` atau `snapshot_exempt`. Temuan yang tidak diputuskan akan jadi
+  kebisingan yang dilewati mata — persis hal yang aturan ini ada untuk cegah.

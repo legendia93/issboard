@@ -44,7 +44,13 @@ fase pertama yang aturannya diuji lawan data host sungguhan **selagi** ditulis,
 bukan sesudahnya. Hasilnya di [`06-kebijakan-snapshot.md`](06-kebijakan-snapshot.md):
 21 dataset diperiksa, **nol temuan palsu**, satu temuan sungguhan — 84 GiB yang
 tidak tercakup aturan snapshot apa pun dan tidak pernah disebut alat lain mana
-pun di mesin itu.
+pun di mesin itu. Terpasang sore itu juga, dan hasil di mesinnya sendiri sama
+persis dengan prediksinya.
+
+Dengan itu, ketiga sisa fase 5 yang menunggu waktu sudah lunas: notifikasi
+Telegram **benar-benar terkirim**, `alert_repeat` 24 jam **terpicu empat kali**,
+dan riwayat 24 jam **terisi penuh tanpa lubang**. Yang tersisa di bawah
+menunggu keputusan, bukan waktu.
 
 Fase 5 tidak ada di rencana awal. Ia ditambahkan setelah kenyataan
 membuktikannya perlu: pemasangan pertama menemukan **enam cacat** yang tidak

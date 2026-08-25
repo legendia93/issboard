@@ -470,9 +470,11 @@ berlaku di luar proyek ini. Yang paling ringkas: **aturan baru harus diuji
 terhadap mesin yang sehat, bukan cuma terhadap mesin yang sakit**, dan
 **ketiadaan data bukan data buruk**.
 
-Yang **belum diuji** dicatat apa adanya di [`distro.md`](distro.md) dan di
-tiap berkas rencana — notifikasi yang benar-benar terkirim, `alert_repeat` 24
-jam, SELinux enforcing, Podman, dan arsitektur selain amd64.
+Notifikasi Telegram sudah benar-benar terkirim dan `alert_repeat` 24 jam sudah
+terbukti berulang di mesin nyata (21–25 Agustus 2026). Yang **belum diuji**
+dicatat apa adanya di [`distro.md`](distro.md) dan di tiap berkas rencana —
+ntfy lawan server sungguhan, SELinux enforcing, Podman, dan arsitektur selain
+amd64.
 
 Fase 6 (25 Agustus 2026) menambahkan **perbandingan kebijakan snapshot dengan
 dataset nyata** — lihat bagian 11.
