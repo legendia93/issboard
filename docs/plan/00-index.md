@@ -35,9 +35,12 @@ Ditetapkan 18 Agustus 2026:
 | 4 | [`04-distribusi.md`](04-distribusi.md) — test, `.deb`, Docker, multi-distro | ✅ selesai |
 | 5 | [`05-pemasangan.md`](05-pemasangan.md) — pasang di mesin sungguhan | ✅ selesai |
 | 6 | [`06-kebijakan-snapshot.md`](06-kebijakan-snapshot.md) — cakupan & umur snapshot | ✅ selesai |
+| 7 | [`07-autentikasi.md`](07-autentikasi.md) — syarat sebelum endpoint bermutasi | ⬜ belum dimulai |
+| 8 | [`08-panel-zfs.md`](08-panel-zfs.md) — side panel: snapshot, scrub, dataset | ⬜ terkunci fase 7 |
 
-Keempat fase yang direncanakan sudah selesai, dan issboard **sudah berjalan di
-host sungguhan** sejak 21 Agustus 2026.
+Enam fase pertama sudah selesai, dan issboard **sudah berjalan di host
+sungguhan** sejak 21 Agustus 2026. Fase 7 dan 8 baru dijadwalkan 25 Agustus
+2026 dan belum dimulai.
 
 Fase 6 mengerjakan item pertama dari daftar "di luar fase" di bawah, dan jadi
 fase pertama yang aturannya diuji lawan data host sungguhan **selagi** ditulis,
@@ -59,13 +62,24 @@ dashboard sepenuhnya, dan satu alarm kritis palsu di menit pertama. Rinciannya
 di [`05-pemasangan.md`](05-pemasangan.md); yang tersisa di bawah belum pernah
 dijadwalkan, dan sebagiannya menunggu keputusan, bukan menunggu waktu.
 
+## Arah berikutnya, ditetapkan 25 Agustus 2026
+
+Dashboard akan **bisa mengatur**, bukan cuma melihat: side panel ZFS — snapshot,
+scrub, dataset, sanoid. Itu fase 8.
+
+Fase 7 ada di depannya **bukan sebagai saran, tapi sebagai syarat**. Selama ini
+yang menjaga issboard bukan kekuatan pembatasnya, melainkan **tidak adanya jalur
+mutasi sama sekali** (`design.md` §8). Panel itu mencabut satu-satunya pembatas
+yang benar-benar bekerja; autentikasi harus sudah berdiri sebelum ia dicabut,
+bukan sesudah.
+
 ## Di luar fase (belum dijadwalkan)
 
 Dari `design.md` bagian 10, masih menunggu:
 
 - ~~Perbandingan konfigurasi snapshot dengan dataset nyata~~ — selesai di fase 6
+- ~~Autentikasi~~ — dijadwalkan sebagai fase 7
 - Panel versi app + deteksi drift antara config dan container yang jalan
 - Fase arsip & unduhan backup
-- Autentikasi — **wajib ada sebelum endpoint bermutasi pertama**, bukan sesudah
 - Replikasi: snapshot yang ada tapi tidak pernah pergi ke luar mesin tetap
   satu disk dari hilang (muncul dari fase 6)

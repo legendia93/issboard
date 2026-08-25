@@ -484,7 +484,15 @@ Rencana yang sedang berjalan — beserta urutannya — ada di
 
 - Panel versi app + deteksi drift antara config dan container yang jalan
 - Fase arsip & unduhan backup
-- Autentikasi (lihat bagian 8)
+- Replikasi: snapshot yang tidak pernah pergi ke luar mesin tetap satu disk
+  dari hilang
+
+Sejak 25 Agustus 2026 ada arah baru yang sudah dijadwalkan: dashboard akan
+**bisa mengatur**, bukan cuma melihat — side panel ZFS di
+[`plan/08-panel-zfs.md`](plan/08-panel-zfs.md). **Autentikasi (bagian 8) jadi
+fase 7 dan mendahuluinya sebagai syarat, bukan saran**: yang menjaga issboard
+selama ini bukan kekuatan pembatasnya, melainkan tidak adanya jalur mutasi
+sama sekali.
 
 ## 11. Kebijakan snapshot vs dataset nyata
 
