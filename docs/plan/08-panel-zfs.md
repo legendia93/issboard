@@ -122,7 +122,8 @@ bukan sekadar mengubah perilakunya.
 Tiga hal yang tidak terlihat di mesin pengembangan:
 
 1. **Laci samping terlalu sempit untuk pekerjaan admin.** Diganti halaman
-   sendiri, `admin.html`, dibuka di tab baru: layar masuk penuh, navigasi per
+   sendiri, `admin.html` (di tab yang sama — tab baru tiap bolak-balik ternyata
+   cuma menumpuk): layar masuk penuh, navigasi per
    bagian lewat hash (`admin.html#dataset` bisa di-bookmark), tabel yang
    memakai lebar layar dan jatuh jadi kartu di HP, riwayat aksi sesi ini, dan
    kabar hasil aksi yang terlihat di bagian mana pun. Dashboard kembali jadi

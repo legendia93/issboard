@@ -181,8 +181,7 @@ Sunting `/etc/issboard.yaml` seperlunya, lalu buka `http://127.0.0.1:9955`.
 
 ### Panel kelola (aksi)
 
-Tombol **kelola** di header membuka **halaman kelola** (`/admin.html`) di tab
-baru — halaman sendiri dengan layar masuk dan navigasi per bagian, supaya
+Tombol **kelola** di header membuka **halaman kelola** (`/admin.html`) — halaman sendiri dengan layar masuk dan navigasi per bagian, supaya
 dashboard tetap halaman baca tanpa satu pun tombol yang mengubah host. Isinya:
 start/stop/restart/hapus container, scrub mulai/jeda/hentikan, SMART tes
 singkat/panjang, batas ARC, buat/hapus snapshot, buat dataset anak, ubah
