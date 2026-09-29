@@ -35,7 +35,8 @@ mkdir -p "$ROOT/systemd" "$ROOT/libexec"
 printf '==> membangun binary (%s, statis)\n' "$GOARCH"
 CGO_ENABLED=0 GOARCH="$GOARCH" go build -trimpath -ldflags "-s -w" -o "$ROOT/issboard" .
 CGO_ENABLED=0 GOARCH="$GOARCH" go build -trimpath -ldflags "-s -w" -o "$ROOT/issboard-agent" ./cmd/issboard-agent
-chmod 0755 "$ROOT/issboard" "$ROOT/issboard-agent"
+CGO_ENABLED=0 GOARCH="$GOARCH" go build -trimpath -ldflags "-s -w" -o "$ROOT/issboard-helper" ./cmd/issboard-helper
+chmod 0755 "$ROOT/issboard" "$ROOT/issboard-agent" "$ROOT/issboard-helper"
 
 cp systemd/*.socket systemd/*.service systemd/*.timer "$ROOT/systemd/"
 cp libexec/issboard-smart-collect "$ROOT/libexec/"

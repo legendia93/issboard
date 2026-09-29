@@ -27,6 +27,16 @@ docker_socket: /var/run/docker.sock
 # Kosongkan untuk mendeteksi semua pool otomatis, atau daftar dipisah koma.
 # pools: pool-satu, pool-dua
 
+# --- Aksi (panel kelola) --------------------------------------------------
+#
+# Kredensial operator, ditulis `sudo issboard -set-password`. Berkas yang tidak
+# ada = semua aksi menolak; bagian baca tetap terbuka.
+# auth_file: /etc/issboard/auth
+
+# Socket issboard-helper, satu-satunya jalan ke aksi root (scrub, SMART
+# self-test, batas ARC). Dipegang issboard-helper.socket.
+# helper_socket: /run/issboard-helper.sock
+
 # --- Kebijakan snapshot ---------------------------------------------------
 #
 # Berkas konfigurasi sanoid, dibandingkan dengan dataset yang benar-benar ada.

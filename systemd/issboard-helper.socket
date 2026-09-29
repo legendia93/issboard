@@ -1,0 +1,27 @@
+# Socket issboard-helper — satu-satunya jalan dari dashboard ke aksi root.
+#
+#   sudo systemctl enable --now issboard-helper.socket
+#
+# issboard.service berjalan dengan NoNewPrivileges=yes, jadi sudo mustahil dari
+# sana — dan itu disengaja. Aksi yang butuh root (scrub, SMART self-test, batas
+# ARC) dikerjakan issboard-helper@.service: dinyalakan per koneksi, satu
+# permintaan, lalu keluar. Tidak ada daemon root yang menyala terus.
+[Unit]
+Description=Socket issboard-helper (aksi root untuk issboard)
+
+[Socket]
+ListenStream=/run/issboard-helper.sock
+# Hanya root dan grup issboard yang boleh menyambung. Inilah pembatas yang
+# sebenarnya: helper tidak memeriksa siapa penelponnya, izin socket-lah yang
+# melakukannya.
+SocketUser=root
+SocketGroup=issboard
+SocketMode=0660
+# Accept=yes: satu instance issboard-helper@.service per koneksi.
+Accept=yes
+# Aksi datang dari satu operator. Batas kecil menahan issboard yang dibobol
+# dari membanjiri host dengan puluhan scrub/smartctl sekaligus.
+MaxConnections=4
+
+[Install]
+WantedBy=sockets.target

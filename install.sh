@@ -31,28 +31,32 @@ cd "$(dirname "$0")"
 
 if [ "${1:-}" = "--uninstall" ]; then
   for u in issboard.socket issboard.service issboard-agent.timer \
-           issboard-agent.service issboard-smart.timer issboard-smart.service; do
+           issboard-agent.service issboard-smart.timer issboard-smart.service \
+           issboard-helper.socket issboard-helper@.service; do
     systemctl disable --now "$u" >/dev/null 2>&1 || true
     rm -f "$UNITDIR/$u"
   done
   rm -f "$PREFIX/bin/issboard" "$PREFIX/bin/issboard-agent" \
-        "$PREFIX/libexec/issboard-smart-collect"
+        "$PREFIX/libexec/issboard-smart-collect" "$PREFIX/libexec/issboard-helper"
   systemctl daemon-reload
   say "issboard dicopot."
-  say "TIDAK dihapus (sengaja): $CONFIG, /etc/issboard/, /var/lib/issboard/,"
+  say "TIDAK dihapus (sengaja): $CONFIG, /etc/issboard/ (termasuk kredensial),"
+  say "/etc/modprobe.d/issboard-zfs-arc.conf kalau ada, /var/lib/issboard/,"
   say "/var/cache/issboard/, dan user sistem '$USER_NAME'."
   exit 0
 fi
 
 # --- binary -----------------------------------------------------------------
-if [ ! -x ./issboard ] || [ ! -x ./issboard-agent ]; then
+if [ ! -x ./issboard ] || [ ! -x ./issboard-agent ] || [ ! -x ./issboard-helper ]; then
   command -v go >/dev/null 2>&1 || die \
     "binary belum ada dan Go tidak terpasang. Build dulu di mesin lain:
        CGO_ENABLED=0 go build -o issboard .
-       CGO_ENABLED=0 go build -o issboard-agent ./cmd/issboard-agent"
+       CGO_ENABLED=0 go build -o issboard-agent ./cmd/issboard-agent
+       CGO_ENABLED=0 go build -o issboard-helper ./cmd/issboard-helper"
   say "==> membangun binary"
   CGO_ENABLED=0 go build -o issboard .
   CGO_ENABLED=0 go build -o issboard-agent ./cmd/issboard-agent
+  CGO_ENABLED=0 go build -o issboard-helper ./cmd/issboard-helper
 fi
 
 say "==> memasang binary ke $PREFIX"
@@ -60,6 +64,7 @@ install -d -m 0755 "$PREFIX/bin" "$PREFIX/libexec"
 install -m 0755 issboard                     "$PREFIX/bin/issboard"
 install -m 0755 issboard-agent               "$PREFIX/bin/issboard-agent"
 install -m 0755 libexec/issboard-smart-collect "$PREFIX/libexec/issboard-smart-collect"
+install -m 0755 issboard-helper              "$PREFIX/libexec/issboard-helper"
 
 # --- user sistem ------------------------------------------------------------
 if ! id "$USER_NAME" >/dev/null 2>&1; then
@@ -69,8 +74,13 @@ if ! id "$USER_NAME" >/dev/null 2>&1; then
     warn "gagal membuat user $USER_NAME — buat manual sebelum menyalakan unit"
 fi
 
-# ⚠️ Grup docker setara root di kebanyakan sistem. Diberikan hanya untuk
-# MEMBACA socket; pembatas sebenarnya di v1 adalah tidak adanya jalur mutasi.
+# issboard-helper.socket memakai SocketGroup=issboard; tanpa grup ini unit
+# socket-nya gagal dinyalakan. useradd --system tidak selalu membuatnya.
+getent group "$USER_NAME" >/dev/null 2>&1 || groupadd --system "$USER_NAME" 2>/dev/null || true
+usermod -aG "$USER_NAME" "$USER_NAME" 2>/dev/null || true
+
+# ⚠️ Grup docker setara root di kebanyakan sistem, dan sejak fase 8 dipakai
+# juga untuk aksi container. Pembatasnya autentikasi issboard (fase 7).
 if getent group docker >/dev/null 2>&1; then
   usermod -aG docker "$USER_NAME" 2>/dev/null || true
 elif getent group podman >/dev/null 2>&1; then
@@ -111,6 +121,7 @@ systemctl daemon-reload
 systemctl enable --now issboard.socket
 systemctl enable --now issboard-smart.timer
 systemctl enable --now issboard-agent.timer
+systemctl enable --now issboard-helper.socket
 
 # --- catatan jujur ----------------------------------------------------------
 say ""
@@ -127,3 +138,8 @@ say "Notifikasi belum menyala sampai kanalnya diisi:"
 say "  sudoedit /etc/issboard/agent.env      # topik ntfy / token Telegram"
 say "  systemctl restart issboard-agent.timer"
 say "Coba tanpa mengirim apa pun:  issboard-agent -dry-run"
+if [ ! -f /etc/issboard/auth ]; then
+  say ""
+  say "Aksi dari dashboard (container, scrub, SMART, ARC) mati sampai kata"
+  say "sandi operator diatur:  sudo $PREFIX/bin/issboard -set-password"
+fi

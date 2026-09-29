@@ -144,7 +144,10 @@ internal/health/        aturan vonis — dipakai ulang pengirim notifikasi
 internal/history/       ring buffer 2 lapis; agent menulis, issboard membaca
 internal/alert/         de-duplikasi "sudah dikabari" + penyusun pesan
 internal/notify/        ntfy & Telegram — cuma HTTP POST, nol dependensi
-internal/api/           GET /api/v1/*
+internal/auth/          kata sandi PBKDF2, sesi HMAC stateless, CSRF, rate limit
+internal/ops/           aksi root (protokol + eksekutor helper), ARC, jadwal
+internal/api/           GET /api/v1/* + POST aksi lewat sesi
+cmd/issboard-helper/    binary KETIGA, root, per koneksi: satu aksi lalu keluar
 web/                    vanilla, ter-embed, tanpa build step
 systemd/                socket + service + timer SMART + timer agent
 libexec/                pengumpul SMART milik root
@@ -171,9 +174,9 @@ buta lebih berbahaya daripada layar yang mengaku tidak tahu.
 
 ## 6. API
 
-Semua JSON. **v1 hanya `GET`**, tapi router sengaja **tidak dikunci** ke GET
-saja: endpoint yang bermutasi akan menyusul, dan bentuknya sudah disiapkan
-supaya tidak perlu dibongkar.
+Semua JSON. v1 hanya `GET`, dan router sengaja tidak dikunci ke GET saja —
+persiapan itu terpakai di fase 8: endpoint aksi (`POST`, lewat sesi + CSRF)
+ditambahkan tanpa membongkar apa pun. Daftar lengkapnya di README.
 
 | Endpoint | Isi |
 |---|---|
@@ -265,12 +268,15 @@ Penerapannya di v1:
   yang dirinya sendiri sudah mengautentikasi perangkat. Rinciannya di 8.1.
 - **Tidak ada autentikasi bawaan** di v1 — disengaja, karena read-only di balik
   loopback. **Begitu ada satu endpoint yang bermutasi, autentikasi wajib lebih
-  dulu**, bukan menyusul.
+  dulu**, bukan menyusul. 🔄 *Ditagih 29 Sep 2026: autentikasi bawaan (fase 7)
+  dibangun lebih dulu, baru panel kelola (fase 8). Bagian baca tetap terbuka.*
 - Jalan sebagai **user sistem sendiri**, bukan root, dengan pengerasan systemd
   (`ProtectSystem=strict`, `NoNewPrivileges`, `SystemCallFilter`, dan seterusnya).
 - ⚠️ Keanggotaan grup `docker` **setara root** di kebanyakan sistem. Grup itu
   diberikan hanya untuk membaca socket; pembatas sebenarnya di v1 adalah
-  **tidak adanya jalur mutasi sama sekali.**
+  **tidak adanya jalur mutasi sama sekali.** 🔄 *Sejak fase 8 kalimat ini
+  kedaluwarsa: grup yang sama dipakai untuk aksi container, dan pembatasnya
+  sekarang autentikasi.*
 
 ### 8.1 Sampai di mana dashboard ini boleh dijangkau
 
@@ -339,6 +345,9 @@ belakangan:
 
 1. **Hak akses per kebutuhan, bukan `NOPASSWD: ALL`.** Godaannya besar saat
    menambahkan aksi pertama yang butuh root. Tuliskan perintah spesifiknya.
+   🔄 *Diterapkan tanpa sudo sama sekali: `NoNewPrivileges` membuatnya
+   mustahil. Aksi root lewat `issboard-helper`, per koneksi, dengan daftar aksi
+   tertutup — lihat plan/08.*
 2. **Validasi nama dataset/pool dengan daftar-putih, bukan regex.** Regex
    meloloskan hal seperti `pool/app@../..`. Ambil daftar nyata dari sistem,
    cocokkan persis, tolak sisanya.
@@ -487,12 +496,13 @@ Rencana yang sedang berjalan — beserta urutannya — ada di
 - Replikasi: snapshot yang tidak pernah pergi ke luar mesin tetap satu disk
   dari hilang
 
-Sejak 25 Agustus 2026 ada arah baru yang sudah dijadwalkan: dashboard akan
-**bisa mengatur**, bukan cuma melihat — side panel ZFS di
-[`plan/08-panel-zfs.md`](plan/08-panel-zfs.md). **Autentikasi (bagian 8) jadi
-fase 7 dan mendahuluinya sebagai syarat, bukan saran**: yang menjaga issboard
-selama ini bukan kekuatan pembatasnya, melainkan tidak adanya jalur mutasi
-sama sekali.
+Sejak 25 Agustus 2026 ada arah baru: dashboard **bisa mengatur**, bukan cuma
+melihat — [`plan/08-panel-zfs.md`](plan/08-panel-zfs.md). **Autentikasi (bagian
+8) jadi fase 7 dan mendahuluinya sebagai syarat, bukan saran**: yang menjaga
+issboard selama ini bukan kekuatan pembatasnya, melainkan tidak adanya jalur
+mutasi sama sekali. Keduanya dikerjakan 29 September 2026 — panel kelola
+(container, scrub, SMART self-test, batas ARC, jadwal) — dan belum dipasang di
+host sungguhan.
 
 ## 11. Kebijakan snapshot vs dataset nyata
 

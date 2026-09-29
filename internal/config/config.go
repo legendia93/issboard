@@ -45,6 +45,10 @@ type Config struct {
 	// bermutasi menolak. Bagian baca tetap terbuka seperti sebelumnya.
 	AuthFile string
 
+	// HelperSocket: socket issboard-helper, satu-satunya jalan ke aksi root
+	// (scrub, SMART self-test, batas ARC). issboard sendiri tidak pernah root.
+	HelperSocket string
+
 	// --- Di bawah ini hanya dipakai issboard-agent (unit bertimer terpisah).
 	//
 	// 🔴 issboard sendiri TIDAK PERNAH memakainya untuk mengirim apa pun.
@@ -94,7 +98,8 @@ func Default() Config {
 
 		SnapPolicyFile: "/etc/sanoid/sanoid.conf",
 
-		AuthFile: "/etc/issboard/auth",
+		AuthFile:     "/etc/issboard/auth",
+		HelperSocket: "/run/issboard-helper.sock",
 
 		HistoryFile: "/var/lib/issboard/history.json",
 		AlertState:  "/var/lib/issboard/alert-state.json",
@@ -151,6 +156,8 @@ func Load(path string) (Config, error) {
 			c.SnapExempt = splitList(val)
 		case "auth_file":
 			c.AuthFile = val
+		case "helper_socket":
+			c.HelperSocket = val
 		case "demo":
 			c.Demo = val == "true" || val == "yes" || val == "1"
 		case "history_file":

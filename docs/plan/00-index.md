@@ -35,12 +35,15 @@ Ditetapkan 18 Agustus 2026:
 | 4 | [`04-distribusi.md`](04-distribusi.md) — test, `.deb`, Docker, multi-distro | ✅ selesai |
 | 5 | [`05-pemasangan.md`](05-pemasangan.md) — pasang di mesin sungguhan | ✅ selesai |
 | 6 | [`06-kebijakan-snapshot.md`](06-kebijakan-snapshot.md) — cakupan & umur snapshot | ✅ selesai |
-| 7 | [`07-autentikasi.md`](07-autentikasi.md) — syarat sebelum endpoint bermutasi | ⬜ belum dimulai |
-| 8 | [`08-panel-zfs.md`](08-panel-zfs.md) — side panel: snapshot, scrub, dataset | ⬜ terkunci fase 7 |
+| 7 | [`07-autentikasi.md`](07-autentikasi.md) — syarat sebelum endpoint bermutasi | ✅ di kode, belum dipasang |
+| 8 | [`08-panel-zfs.md`](08-panel-zfs.md) — panel kelola: container, scrub, SMART, ARC, jadwal | 🟡 bagian pertama, belum dipasang |
 
 Enam fase pertama sudah selesai, dan issboard **sudah berjalan di host
-sungguhan** sejak 21 Agustus 2026. Fase 7 dan 8 baru dijadwalkan 25 Agustus
-2026 dan belum dimulai.
+sungguhan** sejak 21 Agustus 2026. Fase 7 dan 8 dijadwalkan 25 Agustus 2026 dan
+dikerjakan 29 September 2026: autentikasi bawaan, lalu panel **kelola** —
+aksi container, scrub, SMART self-test, batas ARC, dan jadwal otomatis. Keduanya
+**belum dipasang** di host sungguhan; fase 5 membuktikan itu langkah yang
+menemukan cacat sendiri.
 
 Fase 6 mengerjakan item pertama dari daftar "di luar fase" di bawah, dan jadi
 fase pertama yang aturannya diuji lawan data host sungguhan **selagi** ditulis,

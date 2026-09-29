@@ -332,6 +332,9 @@ function render(d) {
   renderContainers(d.containers, worst);
   renderDatasets(d.datasets, d.snap_policy, worst);
   renderErrors(d);
+  // Panel kelola (manage.js) ikut digambar dari snapshot yang sama, supaya
+  // tombolnya selalu cocok dengan keadaan yang sedang terlihat.
+  if (typeof renderManage === 'function') renderManage(d);
 }
 
 // Mencatat nilai yang baru saja dibaca supaya ekor grafik ikut bergerak di

@@ -1,0 +1,40 @@
+# JANGAN di-enable. Dinyalakan issboard-helper.socket, satu per koneksi.
+#
+# Bagian issboard yang berjalan sebagai ROOT. Kemampuannya daftar tertutup
+# (internal/ops): zpool scrub/-s/-p, smartctl -t short/long/-X, systemctl start
+# issboard-smart.service, dan menulis zfs_arc_max. Tiap target dicocokkan
+# dengan daftar dari sistem sebelum apa pun dijalankan.
+[Unit]
+Description=issboard-helper: satu aksi root untuk issboard
+After=issboard-helper.socket
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/issboard-helper
+StandardInput=socket
+StandardOutput=socket
+# Log audit masuk journald: journalctl -u 'issboard-helper@*'
+StandardError=journal
+User=root
+TimeoutStartSec=90
+
+# Pengerasan. Lebih longgar dari issboard.service karena memang harus:
+#  - /dev/zfs dan /dev/sdX dibutuhkan zpool dan smartctl → PrivateDevices=no
+#  - /sys/module/zfs/parameters harus bisa ditulis → ProtectKernelTunables=no
+#  - /etc/modprobe.d untuk batas ARC yang selamat reboot → ReadWritePaths
+ProtectSystem=strict
+ReadWritePaths=/etc/modprobe.d
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+PrivateDevices=no
+ProtectKernelTunables=no
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+# Tidak ada jaringan: AF_UNIX untuk D-Bus (systemctl start) dan AF_NETLINK
+# yang dipakai sebagian perkakas ZFS.
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native

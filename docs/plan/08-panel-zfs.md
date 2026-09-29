@@ -1,9 +1,100 @@
 # Fase 8 — Panel ZFS di dashboard
 
-**Status: ⬜ belum dimulai, dan TERKUNCI oleh
-[`07-autentikasi.md`](07-autentikasi.md).** Ditulis 25 Agustus 2026 dari arahan
-pemilik server: side panel di frontend supaya ZFS bisa diatur dari dashboard —
-buat zpool, destroy, buat dataset, snapshot, sanoid, status scrub, quick test.
+**Status: 🟡 bagian pertama selesai di kode (29 September 2026), belum dipasang
+di host sungguhan.** Ditulis 25 Agustus 2026 dari arahan pemilik server: side
+panel di frontend supaya ZFS bisa diatur dari dashboard — buat zpool, destroy,
+buat dataset, snapshot, sanoid, status scrub, quick test.
+
+## Yang dikerjakan 29 September 2026
+
+Arahan pemilik server hari itu mempersempit sekaligus memperluas daftar di
+atas. Tiga hal yang diminta:
+
+1. **Batas cache ARC bisa diatur.**
+2. **Container bisa dihapus, di-stop, di-start, di-restart** — mirip Portainer.
+3. **Scrub dan quick test disk, plus info jadwal (cron dan lainnya)** — mirip
+   Cockpit.
+
+Semuanya ada di panel **kelola** (tombol di header, atau `#kelola` di URL).
+
+### Bentuknya
+
+| Aksi | Lewat | Kelas |
+|---|---|---|
+| start / stop / restart container | socket Docker (grup `docker` yang sudah ada) | A–B |
+| **hapus** container | socket Docker, `force=0` `v=0` | **C** |
+| scrub mulai / jeda / hentikan | `issboard-helper` → `zpool scrub` | A |
+| SMART tes singkat / panjang / batalkan | `issboard-helper` → `smartctl -t` / `-X` | A |
+| segarkan cache SMART | `issboard-helper` → `systemctl start issboard-smart.service` | A |
+| batas ARC (+ simpan permanen) | `issboard-helper` → `/sys/module/zfs/parameters/zfs_arc_max` | B |
+| jadwal: timer systemd, cron, smartd | dibaca tanpa root | baca |
+
+**Kenapa helper, bukan sudoers.** Aturan 2 di atas meminta sudoers
+per-perintah. Ternyata sudo sama sekali tidak bisa dipakai: `issboard.service`
+berjalan dengan `NoNewPrivileges=yes`, yang mematikan setuid — dan melepasnya
+berarti melemahkan seluruh unit demi beberapa perintah. Jadi aksi root
+dikerjakan `issboard-helper`: binary kecil milik root yang dinyalakan systemd
+**per koneksi** (`issboard-helper.socket`, `Accept=yes`), mengerjakan satu
+permintaan, lalu keluar. Tetap nol proses saat tidak dipakai. Socket-nya
+`0660 root:issboard` — izin itulah pembatasnya, dan kemampuan helper adalah
+daftar tertutup di `internal/ops`, tanpa aksi "jalankan perintah ini".
+
+**Daftar-putih dua kali.** issboard mencocokkan target dengan daftar yang
+ditampilkannya (pool dari `zpool list` + saringan `pools:`, disk dari cache
+SMART, container dari daftar Docker yang **segar**). Helper **tidak
+mempercayai** issboard dan mencocokkan lagi dengan `zpool list` dan
+`smartctl --scan`-nya sendiri. Argumen `-d tipe` untuk smartctl diambil dari
+hasil scan, bukan dari permintaan. Test mengunci bahwa target seperti
+`kolam;reboot`, `kolam/data`, atau `-s` tidak pernah sampai ke exec.
+
+**Hapus container adalah kelas C**, dan diperlakukan begitu: hanya untuk
+container yang **sudah berhenti** (yang jalan ditolak, bukan di-force), volume
+**tidak** ikut dihapus, dan konfirmasinya meminta **mengetik nama container**.
+Pertimbangan "tombol untuk hal yang jarang, mudah salah, tak bisa dibatalkan"
+di bawah tetap berlaku — yang membuatnya layak di sini adalah `docker compose
+up -d` bisa membuatnya lagi selama compose-nya ada.
+
+**Batas ARC** punya dua jebakan yang sekarang terlihat di UI, bukan ditebak:
+
+- ZFS **diam-diam mengabaikan** `zfs_arc_max` yang ≤ `zfs_arc_min` atau
+  < 64 MiB. Penulisan ke `/sys` tetap "berhasil". Helper menolak di luar
+  rentang, lalu membaca ulang `c_max` untuk membuktikan nilainya dipakai.
+- Simpan permanen menulis **hanya** `/etc/modprobe.d/issboard-zfs-arc.conf`.
+  Kalau `zfs_arc_max` sudah diatur di berkas lain, permintaannya **ditolak**
+  sambil menyebut berkas itu: modprobe membaca menurut abjad dan yang terakhir
+  menang, jadi menulis berkas yang kalah lalu melapor "tersimpan" adalah
+  kebohongan. Root di ZFS juga butuh `update-initramfs -u` — ditulis di
+  konfirmasinya.
+
+**Quick test = SMART short self-test**, dijawab dari pertanyaan di bawah. Ia
+**membangunkan disk**, dan konfirmasinya menyebut itu — termasuk kalau disknya
+sedang tidur saat itu. Hasilnya baru terlihat setelah tes selesai **dan** cache
+SMART diperbarui; tombol "segarkan cache" ada untuk itu, dan tetap memakai
+`-n standby`.
+
+**Jadwal.** Cockpit menampilkan timer systemd, tapi tidak cron dan tidak
+smartd — padahal Debian menjadwalkan scrub bawaannya lewat
+`/etc/cron.d/zfsutils-linux`. Panel ini menjejerkan ketiganya, dan mencatat
+kalau scrub dijadwalkan **dua kali** (cron *dan* `zfs-scrub-*.timer`) atau
+**tidak sama sekali**. `e2scrub_all` milik ext4 sengaja tidak dihitung sebagai
+scrub ZFS.
+
+### Belum dikerjakan dari daftar awal
+
+- snapshot manual, buat dataset, ubah properti
+- `zpool create`, `zfs destroy`, `zpool destroy`, `zfs rollback`
+- sanoid (baca/jalankan)
+
+### Belum terbukti
+
+Semua di atas diuji dengan test dan mode demo, **belum** di host sungguhan.
+Yang paling mungkin mengejutkan saat dipasang:
+
+- pengerasan `issboard-helper@.service` terhadap `zpool`/`smartctl` sungguhan
+  (`ProtectKernelModules`, `RestrictAddressFamilies`, `MemoryDenyWriteExecute`)
+- `systemctl list-timers --output=json` dari dalam `issboard.service` yang
+  dikeraskan — butuh D-Bus sistem
+- `zpool scrub -p` di pool yang tidak sedang di-scrub
 
 ## Ini mengubah desain, bukan menambah fitur
 
@@ -67,18 +158,20 @@ tempat lahirnya temuan "stripe, bukan mirror" yang sudah ada di dashboard ini �
 
 ## Yang dikerjakan
 
-- [ ] Fase 7 selesai lebih dulu. Ini bukan urutan yang disarankan, ini syarat.
-- [ ] Bentuk API bermutasi: `POST /api/v1/...`, bukan GET. GET yang mengubah
+- [x] Fase 7 selesai lebih dulu. Ini bukan urutan yang disarankan, ini syarat.
+- [x] Bentuk API bermutasi: `POST /api/v1/...`, bukan GET. GET yang mengubah
       keadaan akan dijalankan oleh prefetch browser dan crawler.
-- [ ] Daftar-putih dari sistem, memakai kembali daftar dataset fase 6.
-- [ ] sudoers per-perintah, ditulis eksplisit, tanpa wildcard.
-- [ ] Log audit tiap mutasi: siapa, apa, target, hasil.
-- [ ] Side panel di FE. Tetap Nothing OS, tetap tanpa pustaka luar, tetap CSP
+- [x] Daftar-putih dari sistem — dua kali, di issboard dan di helper.
+- [x] ~~sudoers per-perintah~~ → helper root per-koneksi, karena
+      `NoNewPrivileges` mematikan sudo (lihat di atas).
+- [x] Log audit tiap mutasi: siapa, apa, target, hasil — di issboard **dan**
+      di helper (`journalctl -u 'issboard-helper@*'`).
+- [x] Side panel di FE. Tetap Nothing OS, tetap tanpa pustaka luar, tetap CSP
       `default-src 'self'`.
-- [ ] Aksi kelas A dulu: snapshot manual, mulai/hentikan scrub.
-- [ ] Status scrub yang sedang berjalan (persen + ETA) — `zpool status` sudah
-      diurai di `internal/collector/zfs.go`, tinggal ditampilkan.
-- [ ] Test: setiap endpoint bermutasi tanpa sesi → 401; nama di luar
+- [ ] Aksi kelas A dulu: ~~snapshot manual~~ (belum), mulai/hentikan scrub ✅.
+- [x] Status scrub yang sedang berjalan — baris `scan:` ditampilkan apa adanya,
+      dan tombolnya mengikuti keadaan (mulai / jeda / lanjutkan / hentikan).
+- [x] Test: setiap endpoint bermutasi tanpa sesi → 401; nama di luar
       daftar-putih → 400; dan **tidak satu pun** input pengguna sampai ke
       `exec` tanpa melewati daftar-putih.
 

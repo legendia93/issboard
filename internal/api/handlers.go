@@ -1,7 +1,7 @@
 // Package api melayani JSON untuk dashboard.
 //
-// Bagian baca (GET) terbuka seperti sejak v1. Endpoint bermutasi yang akan
-// datang SEMUANYA lewat s.mutate (session.go) — sesi, CSRF, audit — lebih dulu.
+// Bagian baca (GET) terbuka seperti sejak v1. Endpoint bermutasi ada di
+// manage.go, dan SEMUANYA lewat s.mutate — sesi, CSRF, audit — lebih dulu.
 package api
 
 import (
@@ -23,7 +23,7 @@ type Server struct {
 	Touch func()
 
 	limiter *auth.Limiter
-	// demoCreds: di mode demo, login dengan demo/demo.
+	// demoCreds: di mode demo, login dengan demo/demo dan aksinya pura-pura.
 	// Rahasianya acak per proses — sesi demo tidak berarti apa-apa di luar.
 	demoCreds auth.Credentials
 }
@@ -46,11 +46,18 @@ func (s *Server) Routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/status", s.handleStatus)
 	mux.HandleFunc("GET /api/v1/history", s.handleHistory)
+	mux.HandleFunc("GET /api/v1/manage", s.handleManage)
 
 	mux.HandleFunc("GET /api/v1/session", s.handleSession)
 	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
 	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
 
+	// 🔴 POST, bukan GET: GET yang mengubah keadaan akan dijalankan oleh
+	// prefetch browser dan crawler. Semua lewat s.mutate.
+	mux.HandleFunc("POST /api/v1/containers/{name}/{action}", s.mutate("container", s.actContainer))
+	mux.HandleFunc("POST /api/v1/pools/{name}/scrub/{op}", s.mutate("scrub", s.actScrub))
+	mux.HandleFunc("POST /api/v1/smart/{op}", s.mutate("smart", s.actSmart))
+	mux.HandleFunc("POST /api/v1/arc", s.mutate("arc", s.actARC))
 	mux.Handle("/", static)
 	return s.middleware(mux)
 }

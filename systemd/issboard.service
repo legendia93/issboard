@@ -8,11 +8,14 @@ After=issboard.socket
 Type=exec
 ExecStart=/usr/local/bin/issboard -config /etc/issboard.yaml
 
-# User sistem sendiri, bukan root. issboard v1 read-only.
+# User sistem sendiri, bukan root. Aksi root (scrub, SMART, ARC) dikerjakan
+# issboard-helper lewat socket-nya — issboard tidak pernah memakai sudo, dan
+# NoNewPrivileges di bawah membuatnya mustahil.
 User=issboard
 Group=issboard
-# Grup docker hanya untuk MEMBACA socket. Perlu disadari: grup docker setara
-# root di mesin ini — pembatas sebenarnya ada di v1 yang tidak bermutasi.
+# ⚠️ Grup docker setara root di mesin ini, dan sejak fase 8 dipakai juga untuk
+# start/stop/restart/hapus container. Pembatasnya sekarang autentikasi di
+# issboard (fase 7): tiap aksi butuh sesi + token CSRF, dan dicatat di journal.
 SupplementaryGroups=docker
 
 # Pengerasan: tidak butuh tulis ke mana pun.

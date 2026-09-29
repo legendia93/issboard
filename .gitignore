@@ -1,5 +1,7 @@
 # binary hasil build
 /issboard
+/issboard-agent
+/issboard-helper
 /dist/
 
 # konfigurasi nyata — HANYA contoh yang boleh masuk repo

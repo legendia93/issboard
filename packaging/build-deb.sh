@@ -59,6 +59,10 @@ printf '==> membangun binary (%s, statis)\n' "$GOARCH"
 # sama dengan memilih Go sejak awal.
 CGO_ENABLED=0 GOARCH="$GOARCH" go build -trimpath -ldflags "-s -w" -o "$ROOT/usr/bin/issboard" .
 CGO_ENABLED=0 GOARCH="$GOARCH" go build -trimpath -ldflags "-s -w" -o "$ROOT/usr/bin/issboard-agent" ./cmd/issboard-agent
+# Helper root di libexec, bukan bin: ia tidak untuk dijalankan orang, hanya
+# oleh issboard-helper@.service dengan socket sebagai stdin/stdout.
+CGO_ENABLED=0 GOARCH="$GOARCH" go build -trimpath -ldflags "-s -w" -o "$ROOT/usr/libexec/issboard-helper" ./cmd/issboard-helper
+chmod 0755 "$ROOT/usr/libexec/issboard-helper"
 # go build mengikuti umask, dan umask 002 menghasilkan 775 — bisa ditulis grup.
 # Isi paket tidak boleh bergantung pada umask mesin yang mem-build-nya.
 chmod 0755 "$ROOT/usr/bin/issboard" "$ROOT/usr/bin/issboard-agent"
@@ -115,8 +119,8 @@ case "$1" in configure)
   if ! id issboard >/dev/null 2>&1; then
     adduser --system --no-create-home --group --shell /usr/sbin/nologin issboard
   fi
-  # ⚠️ Grup docker setara root di kebanyakan sistem. Diberikan HANYA untuk
-  # membaca socket; pembatas sebenarnya adalah tidak adanya jalur mutasi.
+  # ⚠️ Grup docker setara root di kebanyakan sistem, dan sejak fase 8 dipakai
+  # juga untuk aksi container. Pembatasnya autentikasi issboard (fase 7).
   if getent group docker >/dev/null 2>&1; then
     usermod -aG docker issboard || true
   fi
@@ -153,10 +157,17 @@ case "$1" in configure)
     systemctl enable --now issboard.socket || true
     systemctl enable --now issboard-smart.timer || true
     systemctl enable --now issboard-agent.timer || true
+    # Socket helper root. Tanpa kredensial (/etc/issboard/auth) tidak ada
+    # satu pun aksi yang bisa sampai ke sini: issboard menolaknya lebih dulu.
+    systemctl enable --now issboard-helper.socket || true
   fi
 
   echo "issboard: buka http://127.0.0.1:9955 (loopback saja)."
   echo "issboard: notifikasi menyala setelah /etc/issboard/agent.env diisi."
+  if [ ! -f /etc/issboard/auth ]; then
+    echo "issboard: aksi (container, scrub, SMART, ARC) mati sampai kata sandi diatur:"
+    echo "            sudo issboard -set-password"
+  fi
 ;; esac
 exit 0
 POSTINST
@@ -166,7 +177,7 @@ cat > "$ROOT/DEBIAN/prerm" <<'PRERM'
 set -e
 if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
   for u in issboard.socket issboard.service issboard-agent.timer \
-           issboard-smart.timer; do
+           issboard-smart.timer issboard-helper.socket; do
     systemctl disable --now "$u" || true
   done
 fi

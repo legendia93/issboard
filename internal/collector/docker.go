@@ -7,12 +7,16 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
 )
 
 type Container struct {
+	// ID dipakai jalur aksi: permintaan ke Docker memakai ID dari daftar ini,
+	// bukan nama yang diketik orang (design.md §8, daftar-putih).
+	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Image  string `json:"image"`
 	State  string `json:"state"`
@@ -26,9 +30,9 @@ type Container struct {
 	PublishedPorts []string `json:"published_ports"`
 }
 
-func CollectContainers(ctx context.Context, socket string) ([]Container, error) {
-	cl := &http.Client{
-		Timeout: 5 * time.Second,
+func dockerClient(socket string, timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				var d net.Dialer
@@ -36,6 +40,10 @@ func CollectContainers(ctx context.Context, socket string) ([]Container, error) 
 			},
 		},
 	}
+}
+
+func CollectContainers(ctx context.Context, socket string) ([]Container, error) {
+	cl := dockerClient(socket, 5*time.Second)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		"http://docker/v1.43/containers/json?all=1", nil)
 	if err != nil {
@@ -57,6 +65,7 @@ func CollectContainers(ctx context.Context, socket string) ([]Container, error) 
 // sering mengejutkan — network kosong, port 0.0.0.0, status ber-embel-embel.
 func parseContainers(r io.Reader) ([]Container, error) {
 	var raw []struct {
+		ID     string   `json:"Id"`
 		Names  []string `json:"Names"`
 		Image  string   `json:"Image"`
 		State  string   `json:"State"`
@@ -77,7 +86,7 @@ func parseContainers(r io.Reader) ([]Container, error) {
 
 	out := make([]Container, 0, len(raw))
 	for _, r := range raw {
-		c := Container{Image: r.Image, State: r.State, Status: r.Status}
+		c := Container{ID: r.ID, Image: r.Image, State: r.State, Status: r.Status}
 		c.Health = healthFromStatus(r.Status)
 		if len(r.Names) > 0 {
 			c.Name = strings.TrimPrefix(r.Names[0], "/")
@@ -139,4 +148,72 @@ func healthFromStatus(status string) string {
 		return "starting"
 	}
 	return ""
+}
+
+// Aksi container yang dikenal. "remove" sengaja tidak memakai force dan tidak
+// menghapus volume: container yang masih jalan ditolak Docker sendiri, dan
+// data di volume tidak ikut hilang bersama container-nya.
+var containerActions = map[string]struct {
+	method string
+	path   string
+}{
+	"start":   {http.MethodPost, "/start"},
+	"stop":    {http.MethodPost, "/stop?t=10"},
+	"restart": {http.MethodPost, "/restart?t=10"},
+	"remove":  {http.MethodDelete, "?v=0&force=0"},
+}
+
+func ValidContainerAction(a string) bool { _, ok := containerActions[a]; return ok }
+
+// FindContainer mengambil daftar SEGAR (bukan dari cache) lalu mencari nama
+// yang persis sama. Daftar yang basi 30 detik bisa menunjuk container yang
+// sudah dibuat ulang dengan ID lain.
+func FindContainer(ctx context.Context, socket, name string) (Container, error) {
+	cs, err := CollectContainers(ctx, socket)
+	if err != nil {
+		return Container{}, err
+	}
+	for _, c := range cs {
+		if c.Name == name {
+			return c, nil
+		}
+	}
+	return Container{}, fmt.Errorf("container %q tidak ada", name)
+}
+
+// ContainerAction menjalankan aksi terhadap ID yang berasal dari FindContainer.
+func ContainerAction(ctx context.Context, socket, id, action string) (string, error) {
+	a, ok := containerActions[action]
+	if !ok {
+		return "", fmt.Errorf("aksi container tidak dikenal: %q", action)
+	}
+	// stop/restart menunggu container berhenti sampai 10 detik, lalu Docker
+	// masih butuh waktu untuk membereskannya.
+	cl := dockerClient(socket, 40*time.Second)
+	req, err := http.NewRequestWithContext(ctx, a.method,
+		"http://docker/v1.43/containers/"+url.PathEscape(id)+a.path, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := cl.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("socket docker %s: %w", socket, err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+
+	switch resp.StatusCode {
+	case http.StatusNoContent, http.StatusOK:
+		return "selesai", nil
+	case http.StatusNotModified:
+		// Bukan kegagalan: container-nya memang sudah dalam keadaan itu.
+		return "sudah dalam keadaan itu", nil
+	}
+	var e struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &e) == nil && e.Message != "" {
+		return "", fmt.Errorf("docker: %s", e.Message)
+	}
+	return "", fmt.Errorf("docker menjawab %s", resp.Status)
 }

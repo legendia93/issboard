@@ -2,7 +2,8 @@
 
 Dashboard kesehatan host untuk server rumahan berbasis **ZFS + Docker**:
 satu binary Go statis, frontend ikut ter-*embed*, tanpa runtime apa pun di
-server. Read-only di v1.
+server. Bisa juga **mengatur**: container (start/stop/restart/hapus), scrub
+pool, SMART self-test, dan batas cache ARC — semuanya di balik login.
 
 Yang ditampilkan: pool & dataset ZFS (termasuk **apakah pool pernah di-scrub**
 dan **apakah benar-benar redundan**), **kebijakan snapshot dibandingkan dengan
@@ -177,6 +178,28 @@ milik Anda, bukan milik paket.
 
 Sunting `/etc/issboard.yaml` seperlunya, lalu buka `http://127.0.0.1:9955`.
 
+### Panel kelola (aksi)
+
+Tombol **kelola** di header (atau `#kelola` di URL) membuka panel aksi:
+start/stop/restart/hapus container, scrub mulai/jeda/hentikan, SMART tes
+singkat/panjang, batas ARC, dan daftar jadwal otomatis (timer systemd, cron,
+smartd). Semua aksi **mati** sampai kata sandi operator diatur:
+
+```bash
+sudo issboard -set-password              # user bawaan "admin"; -user untuk nama lain
+```
+
+Aksi yang butuh root dikerjakan `issboard-helper` — dinyalakan per permintaan
+oleh `issboard-helper.socket`, yang dinyalakan paket. issboard sendiri tetap
+bukan root dan tidak memakai sudo. Jejak aksinya:
+
+```bash
+journalctl -u issboard -u 'issboard-helper@*' | grep audit
+```
+
+Coba tanpa host sungguhan: `./issboard -demo`, masuk dengan `demo` / `demo` —
+aksinya pura-pura.
+
 ### Mencoba dengan Docker
 
 ```bash
@@ -288,12 +311,16 @@ adalah satu-satunya tempat hal itu bisa ketahuan.
   rapi: `tailscale serve` atau reverse proxy berautentikasi di depannya, supaya
   issboard tetap di loopback. Rinciannya di
   [design.md §8.1](docs/design.md).
-- **issboard tidak punya autentikasi sendiri** di v1. Ini disengaja: read-only
-  di belakang loopback. Begitu ada endpoint yang bermutasi, autentikasi wajib
-  lebih dulu.
+- **Bagian baca terbuka, aksi butuh login.** Kata sandi di-hash PBKDF2 di
+  `/etc/issboard/auth` (0640 `root:issboard`), sesi berupa cookie ber-HMAC yang
+  selamat dari idle-exit, tiap aksi butuh token CSRF, login dibatasi 5 gagal
+  per 15 menit, dan semuanya dicatat di journal. Rinciannya di
+  [plan/07](docs/plan/07-autentikasi.md).
 - Jalan sebagai user sistem sendiri, bukan root, dengan pengerasan systemd.
-- ⚠️ Keanggotaan grup `docker` **setara root** di kebanyakan sistem. Pembatas
-  sebenarnya di v1 adalah tidak adanya jalur mutasi sama sekali.
+  Aksi root lewat `issboard-helper`, yang mencocokkan setiap target dengan
+  daftar dari sistem sendiri — tidak mempercayai issboard.
+- ⚠️ Keanggotaan grup `docker` **setara root** di kebanyakan sistem, dan sejak
+  panel kelola dipakai juga untuk aksi container. Pembatasnya autentikasi.
 
 ## API
 
@@ -302,6 +329,16 @@ adalah satu-satunya tempat hal itu bisa ketahuan.
 | `GET /api/v1/health` | liveness, tanpa mengumpulkan apa pun |
 | `GET /api/v1/status` | seluruh snapshot: host, pools, datasets (termasuk kebijakan snapshot per-dataset), containers, smart, plus `verdict` & `findings[]` |
 | `GET /api/v1/history` | ring buffer dua lapis yang ditulis `issboard-agent`; membaca berkas, tidak mengumpulkan apa pun |
+| `GET /api/v1/manage` | keadaan ARC, jadwal (timer, cron, smartd), apakah helper terpasang |
+| `GET /api/v1/session` | masuk atau belum, dan token CSRF kalau sudah |
+| `POST /api/v1/login`, `/logout` | sesi |
+| `POST /api/v1/containers/{nama}/{start\|stop\|restart\|remove}` | aksi container |
+| `POST /api/v1/pools/{nama}/scrub/{start\|pause\|stop}` | scrub, lewat helper |
+| `POST /api/v1/smart/{short\|long\|abort\|refresh}` | SMART, body `{"device": "/dev/sda"}` |
+| `POST /api/v1/arc` | batas ARC, body `{"max_bytes": n, "persist": true}`; 0 = bawaan |
+
+Semua `POST` aksi butuh cookie sesi **dan** header `X-CSRF-Token`; tanpa sesi
+jawabannya 401.
 
 Kegagalan per-bagian muncul di `errors[]`, bukan menggagalkan seluruh respons —
 dan tetap dilaporkan selama datanya masih dilayani dari cache, bukan cuma di

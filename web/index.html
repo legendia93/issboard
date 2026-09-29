@@ -23,6 +23,7 @@
       <span id="updated" class="n-label">memuat…</span>
       <button id="range" class="n-btn" type="button">1 jam</button>
       <button id="theme" class="n-btn" type="button" title="ganti tema">tema</button>
+      <button id="manage" class="n-btn" type="button" aria-controls="panel">kelola</button>
     </div>
   </header>
 
@@ -79,6 +80,77 @@
 
 </div>
 
+<!-- Panel kelola. Dirender di luar .page supaya menutupi seluruh layar di HP
+     dan menempel di kanan di layar lebar. Bagian ber-input (login, ARC)
+     sengaja statis di sini: daftar lain digambar ulang tiap 15 detik, dan
+     form yang ikut digambar ulang akan menghapus isian yang sedang diketik. -->
+<div id="panel-backdrop" class="drawer-backdrop" hidden></div>
+<aside id="panel" class="drawer" hidden aria-label="kelola">
+  <header class="drawer-head">
+    <h2 class="n-label">kelola</h2>
+    <span id="who" class="n-pill"></span>
+    <button id="panel-close" class="n-btn" type="button">tutup</button>
+  </header>
+
+  <div class="drawer-body">
+    <section class="n-card">
+      <p id="auth-note" class="note">memuat…</p>
+      <form id="login-form" class="mform" hidden>
+        <label class="field"><span class="n-label">nama</span>
+          <input id="login-user" name="user" autocomplete="username" value="admin" required></label>
+        <label class="field"><span class="n-label">kata sandi</span>
+          <input id="login-pw" name="password" type="password" autocomplete="current-password" required></label>
+        <div class="mbtns"><button class="n-btn" type="submit">masuk</button></div>
+      </form>
+      <div class="mbtns"><button id="logout" class="n-btn n-btn-sm" type="button" hidden>keluar</button></div>
+    </section>
+
+    <p id="panel-log" class="panel-log" role="status" hidden></p>
+
+    <h3 class="n-label section">zfs arc — cache memori</h3>
+    <section class="n-card">
+      <div id="arc-info"></div>
+      <form id="arc-form" class="mform" hidden>
+        <label class="field"><span class="n-label">batas maksimum (GiB)</span>
+          <input id="arc-gib" type="number" step="0.5" inputmode="decimal"></label>
+        <label class="check"><input id="arc-persist" type="checkbox" checked> simpan permanen (berlaku setelah reboot)</label>
+        <div class="mbtns">
+          <button class="n-btn n-btn-sm" type="submit">terapkan</button>
+          <button id="arc-default" class="n-btn n-btn-sm" type="button">kembali ke bawaan</button>
+        </div>
+      </form>
+    </section>
+
+    <h3 class="n-label section">scrub pool</h3>
+    <div id="m-pools"></div>
+
+    <h3 class="n-label section">smart self-test</h3>
+    <div id="m-disks"></div>
+
+    <h3 class="n-label section">container</h3>
+    <div id="m-containers"></div>
+
+    <h3 class="n-label section">jadwal otomatis</h3>
+    <div id="m-schedule"></div>
+  </div>
+</aside>
+
+<dialog id="confirm" class="n-card confirm">
+  <form method="dialog">
+    <h3 id="confirm-title" class="confirm-title"></h3>
+    <p id="confirm-text" class="confirm-text"></p>
+    <label id="confirm-type-wrap" class="field" hidden>
+      <span class="n-label">ketik <b id="confirm-name"></b> untuk melanjutkan</span>
+      <input id="confirm-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <div class="mbtns">
+      <button class="n-btn" value="cancel">batal</button>
+      <button id="confirm-ok" class="n-btn" value="ok">lanjut</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="app.js"></script>
+<script src="manage.js"></script>
 </body>
 </html>
