@@ -15,37 +15,6 @@ const REFRESH_MS = 15000;
 // membaca berkas yang sama tiga kali sia-sia.
 const HISTORY_MS = 60000;
 
-/* ---------- helper DOM ----------
-   Sengaja membangun node, bukan merangkai innerHTML: nama container, image,
-   dan mountpoint datang dari sistem dan tidak boleh pernah diperlakukan
-   sebagai markup. */
-function el(tag, props, ...kids) {
-  const n = document.createElement(tag);
-  for (const [k, v] of Object.entries(props || {})) {
-    if (v === null || v === undefined || v === false) continue;
-    if (k === 'class') n.className = v;
-    else if (k === 'style') n.style.cssText = v;
-    else n.setAttribute(k, v);
-  }
-  for (const kid of kids.flat()) {
-    if (kid === null || kid === undefined || kid === false) continue;
-    n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
-  }
-  return n;
-}
-
-const $ = (id) => document.getElementById(id);
-const clear = (node) => { while (node.firstChild) node.removeChild(node.firstChild); };
-
-/* ---------- format ---------- */
-function bytes(n) {
-  if (!n || n < 0) return '0';
-  const u = ['B', 'K', 'M', 'G', 'T', 'P'];
-  let i = 0;
-  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-  return (n < 10 && i > 0 ? n.toFixed(1) : Math.round(n)) + u[i];
-}
-
 // Dikembalikan sebagai [angka, satuan] supaya satuannya bisa dicetak kecil
 // seperti kartu lain — dan supaya "37h" tidak terbaca sebagai 37 jam.
 function uptimeParts(sec) {
@@ -54,18 +23,6 @@ function uptimeParts(sec) {
   const h = Math.floor(sec / 3600);
   if (h > 0) return [h, 'jam'];
   return [Math.floor(sec / 60), 'menit'];
-}
-
-function pct(a, b) { return b > 0 ? Math.round((a / b) * 100) : 0; }
-
-function relTime(iso) {
-  const t = new Date(iso).getTime();
-  if (!t) return '—';
-  const s = Math.round((Date.now() - t) / 1000);
-  if (s < 60) return `${s} dtk lalu`;
-  if (s < 3600) return `${Math.round(s / 60)} mnt lalu`;
-  if (s < 86400) return `${Math.round(s / 3600)} jam lalu`;
-  return `${Math.round(s / 86400)} hari lalu`;
 }
 
 /* ---------- pastel ----------
@@ -313,10 +270,6 @@ function worstBySubject(findings) {
   return m;
 }
 
-function statusDot(level) {
-  return el('span', { class: 'n-dot n-dot-' + (level || 'ok') });
-}
-
 /* ---------- render ---------- */
 function render(d) {
   LAST = d;
@@ -332,9 +285,6 @@ function render(d) {
   renderContainers(d.containers, worst);
   renderDatasets(d.datasets, d.snap_policy, worst);
   renderErrors(d);
-  // Panel kelola (manage.js) ikut digambar dari snapshot yang sama, supaya
-  // tombolnya selalu cocok dengan keadaan yang sedang terlihat.
-  if (typeof renderManage === 'function') renderManage(d);
 }
 
 // Mencatat nilai yang baru saja dibaca supaya ekor grafik ikut bergerak di
@@ -610,14 +560,6 @@ function systemDetails(sys, h) {
   return d;
 }
 
-// zpool status sudah menulis "scrub repaired ..." pada baris scan:, jadi
-// label "scrub:" di kartu akan menghasilkan "scrub: scrub repaired ...".
-function scrubText(line) {
-  if (!line) return 'belum pernah';
-  if (line === 'none requested') return 'belum pernah';
-  return line.replace(/^scrub\s+/, '');
-}
-
 function renderPools(pools, worst) {
   const box = $('pools');
   clear(box);
@@ -822,20 +764,6 @@ function initFindingsFold() {
   });
 }
 
-/* ---------- tema ---------- */
-function initTheme() {
-  const saved = localStorage.getItem('issboard-theme');
-  if (saved) document.documentElement.setAttribute('data-theme', saved);
-
-  $('theme').addEventListener('click', () => {
-    const kini = document.documentElement.getAttribute('data-theme');
-    const sistemGelap = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const berikut = (kini || (sistemGelap ? 'dark' : 'light')) === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', berikut);
-    localStorage.setItem('issboard-theme', berikut);
-  });
-}
-
 /* ---------- rentang grafik ---------- */
 function initRange() {
   const b = $('range');
@@ -891,6 +819,9 @@ async function boot() {
   await tickHistory();
   await tick();
 }
+
+// Tautan lama ke panel laci (#kelola) sekarang menuju halaman kelola sendiri.
+if (location.hash === '#kelola') location.replace('admin.html');
 
 initTheme();
 initRange();

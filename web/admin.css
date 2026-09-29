@@ -1,0 +1,219 @@
+/* ============================================================
+   admin.css — halaman kelola. Token & komponen dari nothing.css,
+   komponen dasar (.note, .kv, .stat, .bar, .card-head) dari style.css.
+
+   Tetap HP lebih dulu: di layar sempit navigasi jadi pita yang bisa
+   digeser di atas, dan tabel jadi kartu bertumpuk. Dari 900px navigasi
+   pindah ke kolom kiri yang menempel saat scroll.
+   ============================================================ */
+
+body { min-height: 100vh; }
+
+/* ---------- Bilah atas ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 14px 16px;
+  background: var(--n-bg);
+  border-bottom: 1px solid var(--n-line);
+}
+.topbar-id, .topbar-act { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+.brand { color: inherit; text-decoration: none; font-size: 22px; }
+.crumb { font-size: 11px; }
+a.n-btn { text-decoration: none; }
+
+/* ---------- Layar masuk ---------- */
+.gate { display: grid; place-items: start center; padding: 12vh 16px 48px; position: relative; z-index: 1; }
+.gate-card { width: min(420px, 100%); padding: 24px; }
+.gate-title { font-size: 20px; margin: 0 0 10px; }
+
+/* ---------- Kerangka ---------- */
+.shell {
+  position: relative; z-index: 1;
+  max-width: 1400px; margin: 0 auto;
+  padding: 0 16px 64px;
+}
+.side {
+  display: flex; gap: 6px; overflow-x: auto;
+  padding: 12px 0; margin-bottom: 8px;
+  scrollbar-width: none;
+}
+.side::-webkit-scrollbar { display: none; }
+.side a {
+  flex: none;
+  font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--n-ink-soft); text-decoration: none;
+  padding: 8px 12px; border-radius: var(--n-radius-pill);
+  border: 1px solid transparent;
+}
+.side a:hover { color: var(--n-ink); }
+.side a.on { color: var(--n-ink); border-color: var(--n-line-strong); }
+
+@media (min-width: 900px) {
+  .shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 28px; padding-top: 20px; }
+  .side {
+    flex-direction: column; overflow: visible;
+    position: sticky; top: 84px; align-self: start;
+    padding: 0; margin: 0;
+  }
+  .side a { padding: 10px 14px; border-radius: var(--n-radius-sm); }
+  .side a.on { background: var(--n-surface); border-color: var(--n-line); }
+}
+
+.content { min-width: 0; }
+.sec-head { margin: 4px 0 16px; }
+.sec-title { font-size: 22px; margin: 0 0 6px; font-weight: 600; }
+.sec .n-card { margin-bottom: 14px; }
+.sec h3.n-label { margin: 0 0 12px; }
+.sub-head { margin: 20px 0 10px; }
+.card-title-lg { font-size: 17px; font-weight: 600; margin: 0 0 12px; overflow-wrap: anywhere; }
+.card-head .card-title-lg { margin: 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.cards .n-card { margin: 0; display: grid; gap: 14px; align-content: start; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; align-items: start; }
+.grid2 .n-card { margin: 0; }
+code { font-family: var(--font-mono); font-size: 0.95em; }
+
+/* ---------- Tabel ----------
+   Grid, bukan <table>: di HP tiap baris jatuh jadi kartu kecil tanpa perlu
+   menggulung ke samping — tabel yang harus digeser di HP menyembunyikan
+   tombolnya persis di luar layar. */
+.tbl { display: grid; }
+.tbl .th, .tbl .tr { display: grid; gap: 4px 16px; align-items: center; padding: 10px 0; border-top: 1px solid var(--n-line); }
+.tbl .th { display: none; border-top: 0; padding-top: 0; }
+.tbl .th span { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--n-ink-soft); }
+.tbl .tr:nth-child(2) { border-top: 0; }
+.td-name { font-weight: 600; display: flex; gap: 8px; align-items: center; min-width: 0; overflow-wrap: anywhere; }
+.td-name.mono { font-size: 13px; font-weight: 500; word-break: break-all; }
+.td-name .n-pill { margin-left: auto; }
+.td-meta { font-size: 12px; color: var(--n-ink-soft); min-width: 0; overflow-wrap: anywhere; }
+.td-act { justify-content: flex-start; }
+
+@media (min-width: 1100px) {
+  .tbl .th { display: grid; }
+  .tbl-ctr .th, .tbl-ctr .tr { grid-template-columns: minmax(140px, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .tbl-snap .th, .tbl-snap .tr { grid-template-columns: minmax(0, 2.4fr) 110px 80px 80px auto; }
+  .tbl-timer .th, .tbl-timer .tr { grid-template-columns: minmax(0, 2fr) 1fr 1fr; }
+  .td-act { justify-content: flex-end; }
+  .td-name .n-pill { margin-left: 8px; }
+}
+
+/* ---------- Dataset: daftar + detail ---------- */
+.split { display: grid; gap: 14px; }
+.ds-list { display: none; }
+.ds-select {
+  font: inherit; font-family: var(--font-mono); font-size: 14px; color: var(--n-ink);
+  background: var(--n-surface); border: 1px solid var(--n-line); border-radius: var(--n-radius-sm);
+  padding: 9px 12px; width: 100%;
+}
+@media (min-width: 1100px) {
+  .split { grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
+  .ds-list-card { position: sticky; top: 84px; max-height: calc(100vh - 110px); overflow-y: auto; }
+  .ds-select { display: none; }
+  .ds-list { display: grid; gap: 2px; }
+}
+.ds-item {
+  -webkit-appearance: none; appearance: none;
+  display: grid; gap: 2px; text-align: left; width: 100%;
+  font: inherit; color: var(--n-ink); background: transparent;
+  border: 1px solid transparent; border-radius: var(--n-radius-sm);
+  padding: 8px 10px; cursor: pointer;
+}
+.ds-item:hover { background: var(--n-surface-2); }
+.ds-item.on { border-color: var(--n-line-strong); }
+.ds-name { font-family: var(--font-mono); font-size: 13px; overflow-wrap: anywhere; }
+.kv-props { grid-template-columns: repeat(auto-fill, minmax(110px, auto) minmax(120px, 1fr)); }
+
+/* ---------- Notifikasi aksi ---------- */
+.toasts {
+  position: fixed; right: 16px; bottom: 16px; z-index: 30;
+  display: grid; gap: 8px; width: min(420px, calc(100vw - 32px));
+}
+.toast {
+  display: grid; gap: 4px; cursor: pointer;
+  font-size: 12px; padding: 12px 14px;
+  background: var(--n-surface); border: 1px solid var(--n-line); border-radius: var(--n-radius-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+}
+.toast b { font-family: var(--font-mono); font-weight: 600; }
+.toast span { font-family: var(--font-mono); overflow-wrap: anywhere; color: var(--n-ink-soft); }
+.toast.err { border-color: var(--st-crit); }
+.toast.err b { color: var(--st-crit); }
+
+/* ---------- Form, tombol, dialog (dulu di panel laci) ---------- */
+
+.mform { display: grid; gap: 12px; margin-top: 12px; }
+.field { display: grid; gap: 6px; }
+.field input, .check input[type="checkbox"] { accent-color: var(--n-ink); }
+.field input {
+  font: inherit; font-family: var(--font-mono); font-size: 14px;
+  color: var(--n-ink); background: var(--n-surface);
+  border: 1px solid var(--n-line); border-radius: var(--n-radius-sm);
+  padding: 9px 12px; width: 100%; min-width: 0;
+}
+.field input:focus { outline: none; border-color: var(--n-line-strong); }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+
+.mbtns { display: flex; flex-wrap: wrap; gap: 6px; }
+.mtop { margin: 8px 0 12px; }
+.n-btn-sm { padding: 6px 11px; }
+.n-btn:disabled { opacity: .35; cursor: not-allowed; }
+.n-btn:disabled:hover { background: transparent; color: var(--n-ink); }
+/* Merah dipakai HANYA untuk aksi yang tidak bisa dibatalkan — sama hematnya
+   dengan merah untuk status kritis. */
+.n-btn-danger { border-color: var(--n-accent); color: var(--n-accent); }
+.n-btn-danger:hover { background: var(--n-accent); color: var(--n-accent-ink); }
+
+.mrows { display: grid; }
+.mrow {
+  display: grid; gap: 4px; padding: 10px 0;
+  border-top: 1px solid var(--n-line);
+}
+.mrow:first-child { border-top: 0; }
+.mname { font-weight: 600; display: flex; gap: 8px; align-items: center; overflow-wrap: anywhere; }
+.mmeta { font-size: 12px; color: var(--n-ink-soft); overflow-wrap: anywhere; }
+.mono { font-family: var(--font-mono); }
+.mrow .mbtns { margin-top: 4px; }
+.note.warn { color: var(--st-warn); }
+
+.panel-log {
+  font-family: var(--font-mono); font-size: 12px;
+  border: 1px solid var(--n-line); border-radius: var(--n-radius-sm);
+  padding: 10px 12px; margin: 12px 0 0; overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.panel-log.err { border-color: var(--st-crit); color: var(--st-crit); background: var(--st-crit-fill); }
+
+.confirm {
+  width: min(440px, calc(100vw - 32px));
+  color: var(--n-ink);
+  padding: 20px;
+}
+.confirm::backdrop { background: rgba(0, 0, 0, .45); }
+.confirm-title { margin: 0 0 10px; font-size: 17px; }
+.confirm-text { margin: 0 0 16px; font-size: 14px; line-height: 1.5; }
+.confirm .field { margin-bottom: 16px; }
+.confirm .mbtns { justify-content: flex-end; }
+
+.field select {
+  font: inherit; font-family: var(--font-mono); font-size: 14px;
+  color: var(--n-ink); background: var(--n-surface);
+  border: 1px solid var(--n-line); border-radius: var(--n-radius-sm);
+  padding: 9px 12px; width: 100%; min-width: 0;
+}
+.mname .n-pill { margin-left: auto; }
+.snippet {
+  font-family: var(--font-mono); font-size: 12px;
+  background: var(--n-surface-2); border-radius: var(--n-radius-sm);
+  padding: 10px 12px; margin: 8px 0; overflow-x: auto; white-space: pre;
+  user-select: all;
+}
+/* Nama snapshot panjang dan tanpa spasi; di ukuran judul ia terpenggal di
+   tengah kata ("hour / ly"). Lebih kecil, dan dipenggal di mana saja. */
+.mname.mono { font-size: 13px; font-weight: 500; word-break: break-all; }
+.mform { margin-top: 0; }
+.check input:disabled + * , .check:has(input:disabled) { opacity: .55; }
+.bar + .kv { margin-top: 18px; }
+/* Di HP bilah atas sudah dua baris; stempel waktu yang paling bisa dikorbankan
+   — ia ada juga di dashboard, dan tiap aksi memberi kabarnya sendiri. */
+@media (max-width: 560px) { #updated { display: none; } }

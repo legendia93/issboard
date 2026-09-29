@@ -301,6 +301,7 @@ body {
   transition: background .15s ease, color .15s ease;
 }
 .n-btn:hover { background: var(--n-ink); color: var(--n-bg); }
+a.n-btn { text-decoration: none; }
 
 /* ---------- 12. Garis & scrollbar ---------- */
 .n-line-h { border: 0; border-top: 1px solid var(--n-line); margin: 0; }

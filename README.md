@@ -181,7 +181,9 @@ Sunting `/etc/issboard.yaml` seperlunya, lalu buka `http://127.0.0.1:9955`.
 
 ### Panel kelola (aksi)
 
-Tombol **kelola** di header (atau `#kelola` di URL) membuka panel aksi:
+Tombol **kelola** di header membuka **halaman kelola** (`/admin.html`) di tab
+baru — halaman sendiri dengan layar masuk dan navigasi per bagian, supaya
+dashboard tetap halaman baca tanpa satu pun tombol yang mengubah host. Isinya:
 start/stop/restart/hapus container, scrub mulai/jeda/hentikan, SMART tes
 singkat/panjang, batas ARC, buat/hapus snapshot, buat dataset anak, ubah
 properti dataset, jalankan sanoid (plus potongan `sanoid.conf` untuk dataset
@@ -314,6 +316,12 @@ adalah satu-satunya tempat hal itu bisa ketahuan.
   rapi: `tailscale serve` atau reverse proxy berautentikasi di depannya, supaya
   issboard tetap di loopback. Rinciannya di
   [design.md §8.1](docs/design.md).
+- **Di belakang proxy di host yang sama** (mis. cloudflared), alamat asli
+  pengunjung dibaca dari `CF-Connecting-IP` / `X-Forwarded-For` — tapi HANYA
+  kalau koneksinya datang dari loopback. Tanpa itu pembatas login jadi satu
+  hitungan global yang bisa dipakai siapa pun untuk mengunci pemiliknya.
+  Aset statis dikirim `Cache-Control: no-cache` dan API `no-store`, supaya CDN
+  tidak menyajikan CSS lama bersama HTML baru.
 - **Bagian baca terbuka, aksi butuh login.** Kata sandi di-hash PBKDF2 di
   `/etc/issboard/auth` (0640 `root:issboard`), sesi berupa cookie ber-HMAC yang
   selamat dari idle-exit, tiap aksi butuh token CSRF, login dibatasi 5 gagal

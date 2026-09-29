@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>issboard — kelola</title>
+<link rel="stylesheet" href="nothing.css">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div class="n-appbg"></div>
+
+<!-- Halaman kelola sendiri, bukan laci di atas dashboard: aksi butuh ruang untuk
+     menjelaskan akibatnya, dan dashboard harus tetap bisa dibaca sambil lewat
+     tanpa satu pun tombol yang bisa tersentuh tak sengaja. -->
+<header class="topbar">
+  <div class="topbar-id">
+    <a class="brand" href="./">issboard</a>
+    <span class="n-label crumb">kelola</span>
+    <span id="host-pill" class="n-pill" hidden></span>
+    <span id="demo-pill" class="n-pill n-pill-warn" hidden>data palsu</span>
+  </div>
+  <div class="topbar-act">
+    <span id="updated" class="n-label">memuat…</span>
+    <a class="n-btn" href="./">dashboard</a>
+    <button id="theme" class="n-btn" type="button" title="ganti tema">tema</button>
+    <span id="who" class="n-pill" hidden></span>
+    <button id="logout" class="n-btn" type="button" hidden>keluar</button>
+  </div>
+</header>
+
+<!-- Layar masuk: menutupi seluruh halaman selama belum ada sesi. Bagian baca
+     tetap bisa dilihat di dashboard; di sini semuanya tentang aksi. -->
+<main id="gate" class="gate" hidden>
+  <section class="n-card gate-card">
+    <h1 class="gate-title">Masuk untuk mengelola host</h1>
+    <p id="auth-note" class="note"></p>
+    <form id="login-form" class="mform" hidden>
+      <label class="field"><span class="n-label">nama</span>
+        <input id="login-user" name="user" autocomplete="username" value="admin" required></label>
+      <label class="field"><span class="n-label">kata sandi</span>
+        <input id="login-pw" name="password" type="password" autocomplete="current-password" required></label>
+      <div class="mbtns"><button class="n-btn" type="submit">masuk</button></div>
+    </form>
+    <p id="gate-log" class="panel-log err" hidden></p>
+  </section>
+</main>
+
+<div id="app" class="shell" hidden>
+  <nav class="side" aria-label="bagian">
+    <a href="#container" data-sec="container">container</a>
+    <a href="#pool" data-sec="pool">pool &amp; scrub</a>
+    <a href="#dataset" data-sec="dataset">dataset &amp; snapshot</a>
+    <a href="#disk" data-sec="disk">disk smart</a>
+    <a href="#arc" data-sec="arc">memori arc</a>
+    <a href="#sanoid" data-sec="sanoid">sanoid</a>
+    <a href="#jadwal" data-sec="jadwal">jadwal</a>
+    <a href="#riwayat" data-sec="riwayat">riwayat aksi</a>
+  </nav>
+
+  <main class="content">
+    <p id="helper-note" class="note warn" hidden>issboard-helper.socket belum aktif — aksi scrub, SMART,
+      ARC, snapshot, dan dataset akan gagal. Periksa <code>systemctl status issboard-helper.socket</code>.</p>
+
+    <section id="sec-container" class="sec" data-sec="container">
+      <header class="sec-head">
+        <h2 class="sec-title">Container</h2>
+        <p class="note">Lewat socket Docker. Hapus hanya untuk container yang sudah berhenti; volume tidak ikut terhapus.</p>
+      </header>
+      <div id="m-containers"></div>
+    </section>
+
+    <section id="sec-pool" class="sec" data-sec="pool" hidden>
+      <header class="sec-head">
+        <h2 class="sec-title">Pool &amp; scrub</h2>
+        <p class="note">Scrub membaca seluruh data dan memverifikasi checksum. Pool tanpa redundansi hanya bisa melaporkan kerusakan, tidak memperbaikinya.</p>
+      </header>
+      <div id="m-pools"></div>
+    </section>
+
+    <section id="sec-dataset" class="sec" data-sec="dataset" hidden>
+      <header class="sec-head">
+        <h2 class="sec-title">Dataset &amp; snapshot</h2>
+      </header>
+      <div class="split">
+        <div class="n-card ds-list-card">
+          <h3 class="n-label">dataset</h3>
+          <!-- Di HP daftar diganti pilihan tunggal: daftar panjang di atas
+               detail memaksa menggulung jauh sebelum sampai ke isinya. -->
+          <select id="ds-select" class="ds-select" aria-label="dataset"></select>
+          <div id="ds-list" class="ds-list"></div>
+        </div>
+        <div class="ds-main">
+          <div class="n-card">
+            <h3 id="ds-title" class="card-title-lg">—</h3>
+            <div id="ds-detail"></div>
+          </div>
+
+          <div class="grid2">
+            <form id="snap-form" class="n-card mform">
+              <h3 class="n-label">buat snapshot</h3>
+              <label class="field"><span class="n-label">tag (opsional)</span>
+                <input id="snap-tag" maxlength="32" placeholder="sebelum-upgrade" autocapitalize="off" spellcheck="false"></label>
+              <label class="check"><input id="snap-rec" type="checkbox"> ikut semua anak dataset (-r)</label>
+              <div class="mbtns"><button class="n-btn n-btn-sm" type="submit">buat snapshot</button></div>
+            </form>
+
+            <form id="prop-form" class="n-card mform">
+              <h3 class="n-label">ubah properti</h3>
+              <label class="field"><span class="n-label">properti</span>
+                <select id="prop-name"></select></label>
+              <label id="prop-choice-wrap" class="field"><span class="n-label">nilai</span>
+                <select id="prop-choice"></select></label>
+              <label id="prop-size-wrap" class="field" hidden><span class="n-label">ukuran (mis. 50G) atau none</span>
+                <input id="prop-size" autocapitalize="off" spellcheck="false"></label>
+              <p id="prop-help" class="note"></p>
+              <div class="mbtns"><button class="n-btn n-btn-sm" type="submit">terapkan</button></div>
+            </form>
+
+            <form id="child-form" class="n-card mform">
+              <h3 class="n-label">buat dataset anak</h3>
+              <label class="field"><span class="n-label">nama</span>
+                <input id="child-name" maxlength="64" placeholder="nama-baru" autocapitalize="off" spellcheck="false"></label>
+              <label class="field"><span class="n-label">compression</span>
+                <select id="child-comp"><option value="">warisi induk</option></select></label>
+              <label class="field"><span class="n-label">quota (opsional)</span>
+                <input id="child-quota" placeholder="50G" autocapitalize="off" spellcheck="false"></label>
+              <div class="mbtns"><button class="n-btn n-btn-sm" type="submit">buat dataset</button></div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-disk" class="sec" data-sec="disk" hidden>
+      <header class="sec-head">
+        <h2 class="sec-title">Disk — SMART self-test</h2>
+        <p class="note">Tes membangunkan disk yang sedang tidur. Hasilnya baru terlihat setelah tes selesai DAN cache SMART diperbarui:
+          ±2 menit untuk tes singkat, berjam-jam untuk tes panjang.</p>
+      </header>
+      <div id="m-disks"></div>
+    </section>
+
+    <section id="sec-arc" class="sec" data-sec="arc" hidden>
+      <header class="sec-head">
+        <h2 class="sec-title">Memori ARC</h2>
+        <p class="note">Cache baca ZFS di RAM. Batas yang lebih kecil memberi ruang ke container; bacaan dari disk bertambah.</p>
+      </header>
+      <div class="grid2">
+        <div class="n-card"><div id="arc-info"></div></div>
+        <form id="arc-form" class="n-card mform" hidden>
+          <h3 class="n-label">ubah batas</h3>
+          <label class="field"><span class="n-label">batas maksimum (GiB)</span>
+            <input id="arc-gib" type="number" step="0.5" inputmode="decimal"></label>
+          <label class="check"><input id="arc-persist" type="checkbox" checked> simpan permanen (berlaku setelah reboot)</label>
+          <p id="arc-persist-note" class="note" hidden></p>
+          <div class="mbtns">
+            <button class="n-btn n-btn-sm" type="submit">terapkan</button>
+            <button id="arc-default" class="n-btn n-btn-sm" type="button">kembali ke bawaan</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="sec-sanoid" class="sec" data-sec="sanoid" hidden>
+      <header class="sec-head">
+        <h2 class="sec-title">Sanoid</h2>
+        <p class="note">issboard membaca sanoid.conf tapi tidak pernah menulisnya — berkas itu milik sanoid.</p>
+      </header>
+      <div id="m-sanoid"></div>
+    </section>
+
+    <section id="sec-jadwal" class="sec" data-sec="jadwal" hidden>
+      <header class="sec-head">
+        <h2 class="sec-title">Jadwal otomatis</h2>
+        <p class="note">Timer systemd, cron, dan smartd yang menyangkut penyimpanan — dijejerkan, karena Debian menjadwalkan scrub lewat cron, bukan timer.</p>
+      </header>
+      <div id="m-schedule"></div>
+    </section>
+
+    <section id="sec-riwayat" class="sec" data-sec="riwayat" hidden>
+      <header class="sec-head">
+        <h2 class="sec-title">Riwayat aksi</h2>
+        <p class="note">Hanya sesi browser ini. Catatan lengkap dan tetap ada di journal host:
+          <code>journalctl -u issboard -u 'issboard-helper@*' | grep audit</code></p>
+      </header>
+      <div id="m-history" class="n-card"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Hasil aksi terakhir, selalu terlihat di bagian mana pun sedang dibuka. -->
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+<dialog id="confirm" class="n-card confirm">
+  <form method="dialog">
+    <h3 id="confirm-title" class="confirm-title"></h3>
+    <p id="confirm-text" class="confirm-text"></p>
+    <label id="confirm-type-wrap" class="field" hidden>
+      <span class="n-label">ketik <b id="confirm-name"></b> untuk melanjutkan</span>
+      <input id="confirm-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <div class="mbtns">
+      <button class="n-btn" value="cancel">batal</button>
+      <button id="confirm-ok" class="n-btn" value="ok">lanjut</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="common.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

@@ -117,6 +117,33 @@ belum.
 `sharenfs`/`sharesmb`. Salah isi di sana memindahkan atau menyembunyikan data,
 bukan sekadar mengubah perilakunya.
 
+## Sesudah dipasang pertama kali (29 September 2026)
+
+Tiga hal yang tidak terlihat di mesin pengembangan:
+
+1. **Laci samping terlalu sempit untuk pekerjaan admin.** Diganti halaman
+   sendiri, `admin.html`, dibuka di tab baru: layar masuk penuh, navigasi per
+   bagian lewat hash (`admin.html#dataset` bisa di-bookmark), tabel yang
+   memakai lebar layar dan jatuh jadi kartu di HP, riwayat aksi sesi ini, dan
+   kabar hasil aksi yang terlihat di bagian mana pun. Dashboard kembali jadi
+   halaman baca murni — tidak ada satu pun tombol yang mengubah host di sana.
+   Helper bersama keduanya pindah ke `common.js`.
+2. **CDN menyajikan CSS lama bersama HTML baru.** Lewat domain di belakang
+   Cloudflare, panel tampil tanpa gaya sama sekali; lewat tailnet benar. `.css`
+   dan `.js` di-cache di edge menurut ekstensinya, dan aset ter-embed tidak
+   punya validator. Sekarang semua aset `Cache-Control: no-cache`, API
+   `no-store` (`/session` membawa token CSRF).
+3. **Di belakang cloudflared semua orang adalah 127.0.0.1.** Pembatas login
+   jadi satu hitungan global — lima tebakan salah dari siapa pun mengunci
+   pemiliknya — dan audit mencatat alamat yang sama untuk semua. Alamat asli
+   dibaca dari `CF-Connecting-IP`/`X-Forwarded-For`, **hanya** kalau
+   koneksinya dari loopback; dari tailnet header itu bisa dipalsukan.
+
+Dan satu yang justru bekerja seperti dirancang: di mesin nyata `zfs_arc_max`
+sudah diatur di `/etc/modprobe.d/zfs.conf`, dan helper menolak "simpan
+permanen" sambil menyebut berkas itu. Halaman kelola sekarang mematikan pilihan
+itu di depan dan menjelaskan jalan keluarnya, bukan menunggu ditolak.
+
 ### Belum dikerjakan, dengan sengaja
 
 - `zfs destroy` **dataset**, `zfs rollback`, `zpool destroy` — alasan di
