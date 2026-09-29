@@ -1,7 +1,7 @@
-// Package api melayani JSON read-only untuk v1.
+// Package api melayani JSON untuk dashboard.
 //
-// Router sengaja tidak dikunci ke GET saja: docs/design.md §6 meminta bentuknya
-// siap untuk endpoint bermutasi menyusul, tanpa harus dibongkar.
+// Bagian baca (GET) terbuka seperti sejak v1. Endpoint bermutasi yang akan
+// datang SEMUANYA lewat s.mutate (session.go) — sesi, CSRF, audit — lebih dulu.
 package api
 
 import (
@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/legendia93/issboard/internal/auth"
 	"github.com/legendia93/issboard/internal/collector"
 	"github.com/legendia93/issboard/internal/config"
 	"github.com/legendia93/issboard/internal/health"
@@ -20,13 +21,24 @@ type Server struct {
 	cache *collector.Cache
 	// Touch dipanggil tiap request supaya pengatur idle tahu ada yang melihat.
 	Touch func()
+
+	limiter *auth.Limiter
+	// demoCreds: di mode demo, login dengan demo/demo.
+	// Rahasianya acak per proses — sesi demo tidak berarti apa-apa di luar.
+	demoCreds auth.Credentials
 }
 
 func New(cfg config.Config, cache *collector.Cache, touch func()) *Server {
 	if touch == nil {
 		touch = func() {}
 	}
-	return &Server{cfg: cfg, cache: cache, Touch: touch}
+	s := &Server{cfg: cfg, cache: cache, Touch: touch, limiter: auth.NewLimiter()}
+	if cfg.Demo {
+		// Iterasi kecil: kata sandinya memang tertulis di sini.
+		h, _ := auth.HashPasswordIter("demo", 1000)
+		s.demoCreds = auth.Credentials{User: "demo", Hash: h, Secret: auth.NewSecret()}
+	}
+	return s
 }
 
 func (s *Server) Routes(static http.Handler) http.Handler {
@@ -34,6 +46,11 @@ func (s *Server) Routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/status", s.handleStatus)
 	mux.HandleFunc("GET /api/v1/history", s.handleHistory)
+
+	mux.HandleFunc("GET /api/v1/session", s.handleSession)
+	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
+	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
+
 	mux.Handle("/", static)
 	return s.middleware(mux)
 }

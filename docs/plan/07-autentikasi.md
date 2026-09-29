@@ -1,8 +1,8 @@
 # Fase 7 — Autentikasi
 
-**Status: ⬜ belum dimulai.** Ditulis 25 Agustus 2026, saat fase 6 baru selesai
-dan panel ZFS ([`08-panel-zfs.md`](08-panel-zfs.md)) sudah diputuskan akan
-dikerjakan.
+**Status: ✅ selesai di kode (29 September 2026), belum dipasang di host
+sungguhan.** Ditulis 25 Agustus 2026, saat fase 6 baru selesai dan panel ZFS
+([`08-panel-zfs.md`](08-panel-zfs.md)) sudah diputuskan akan dikerjakan.
 
 ## Kenapa ini yang duluan, bukan panelnya
 
@@ -68,21 +68,53 @@ Go 1.26 sudah punya `crypto/pbkdf2` dan `crypto/hmac` di pustaka standar, jadi
 janji **nol dependensi di luar pustaka standar** (§3.1) tidak perlu dilanggar
 untuk ini.
 
+## Keputusan: sendiri, di dalam issboard (29 September 2026)
+
+Proxy kalah bukan karena lebih buruk secara struktur — tabel di atas masih
+benar — tapi karena keadaan nyata mesinnya:
+
+1. **Belum ada proxy berautentikasi di depan issboard.** Aksesnya tailnet
+   langsung. Cloudflare Access belum terpasang, dan `tailscale serve` hanya
+   memberi header identitas yang tetap mengautentikasi *akun tailnet*, bukan
+   orang di depan HP yang tertinggal.
+2. **Harus tetap bekerja saat internet mati** — justru saat dashboard paling
+   dibutuhkan. Access butuh Cloudflare.
+3. Kode yang "harus benar" ternyata kecil: ±300 baris di `internal/auth`, nol
+   dependensi, semuanya dikunci test.
+
+Jalur proxy tetap terbuka nanti: issboard yang punya autentikasi sendiri tidak
+menjadi lebih lemah dengan ditaruh di belakang proxy.
+
 ## Yang dikerjakan
 
-- [ ] Putuskan lebih dulu: sendiri atau proxy. Sisanya bergantung pada ini.
-- [ ] Kalau sendiri: kata sandi di-hash (bukan plaintext di config), cookie
-      sesi ber-HMAC, `HttpOnly` + `Secure` + `SameSite=Strict`.
-- [ ] **CSRF.** `SameSite=Strict` menutup sebagian besar, tapi endpoint
-      bermutasi tetap wajib menolak permintaan yang tidak membawa token.
-- [ ] **Rate limit** pada jalur login. Tanpa ini, kata sandi apa pun cuma soal
-      waktu.
-- [ ] **Log audit**: siapa, apa, kapan, berhasil atau tidak — untuk **setiap**
-      permintaan bermutasi. Ditulis ke journald, bukan berkas baru.
-- [ ] Bagian read-only tetap boleh terbuka atau ikut tertutup — putuskan sadar,
-      jangan sampai kebetulan.
-- [ ] Test yang mengunci hal yang paling mudah lolos: endpoint bermutasi tanpa
-      sesi harus **401**, bukan 200 yang diam-diam bekerja.
+- [x] Putuskan lebih dulu: sendiri atau proxy — **sendiri**, lihat di atas.
+- [x] Kata sandi di-hash **PBKDF2-SHA256, 600 ribu iterasi**, di
+      `/etc/issboard/auth` (0640 `root:issboard`) — bukan di config yang boleh
+      dibaca siapa saja. Ditulis `sudo issboard -set-password`.
+- [x] Cookie sesi ber-HMAC, **stateless**, berlaku 12 jam. `HttpOnly` +
+      `SameSite=Strict`. `Secure` **hanya kalau sambungannya HTTPS**: tailnet
+      melayani HTTP polos, dan browser membuang cookie `Secure` di HTTP — login
+      akan "berhasil" lalu langsung lupa.
+- [x] Mengganti kata sandi selalu mengganti rahasia HMAC → **semua sesi lama
+      ter-logout**, termasuk HP yang tertinggal dalam keadaan masuk.
+- [x] **CSRF**: token diturunkan dari sesi (HMAC nonce), dikirim di header
+      `X-CSRF-Token`, plus penolakan `Origin`/`Sec-Fetch-Site` asing.
+- [x] **Rate limit** login: 5 gagal per alamat per 15 menit, lalu 429 —
+      termasuk untuk kata sandi yang benar. Di memori, dan itu cukup: penyerang
+      yang terus menebak justru menahan proses tetap hidup.
+- [x] **Log audit** ke journald (stderr): login berhasil/gagal/ditahan, dan tiap
+      aksi dicatat **sebelum** dijalankan dan sesudahnya, dengan user dan IP.
+- [x] Bagian read-only **tetap terbuka** — keputusan sadar: tidak ada yang
+      berubah untuk yang cuma melihat, dan agent tidak butuh sesi.
+- [x] Test: tiap endpoint bermutasi tanpa sesi → **401** (mode demo dan mode
+      tanpa berkas kredensial), tanpa CSRF → 403, origin asing → 403, GET ke
+      jalur aksi tidak menjalankan apa pun.
+
+## Belum terbukti
+
+- Belum pernah dipasang di host sungguhan. Yang paling mungkin mengejutkan:
+  izin `/etc/issboard/auth` saat grup `issboard` dibuat dengan cara lain dari
+  `adduser --group`.
 
 ## Yang TIDAK dikerjakan di fase ini
 

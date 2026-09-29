@@ -1,4 +1,7 @@
-// issboard — dashboard kesehatan host, satu binary, read-only (v1).
+// issboard — dashboard kesehatan host, satu binary.
+//
+// Bagian baca terbuka; aksi (container, scrub, SMART, ARC) butuh login dan
+// aksi root dikerjakan issboard-helper — issboard sendiri tidak pernah root.
 //
 // Dijalankan lewat systemd socket activation: yang enabled adalah
 // issboard.socket, bukan issboard.service. Proses ini keluar sendiri setelah
@@ -6,6 +9,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"embed"
 	"errors"
@@ -16,13 +20,18 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"os/user"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/legendia93/issboard/internal/api"
+	"github.com/legendia93/issboard/internal/auth"
 	"github.com/legendia93/issboard/internal/collector"
 	"github.com/legendia93/issboard/internal/config"
 )
@@ -34,11 +43,20 @@ func main() {
 	cfgPath := flag.String("config", "/etc/issboard.yaml", "berkas konfigurasi")
 	demo := flag.Bool("demo", false, "sajikan data palsu; tidak menyentuh sistem sama sekali")
 	webDir := flag.String("web", "", "layani berkas web dari folder ini, bukan dari yang ter-embed")
+	setPw := flag.Bool("set-password", false, "atur kata sandi operator (jalankan sebagai root), lalu keluar")
+	pwUser := flag.String("user", "admin", "nama operator untuk -set-password")
 	flag.Parse()
 
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		log.Fatalf("config %s: %v", *cfgPath, err)
+	}
+	if *setPw {
+		if err := setPassword(cfg.AuthFile, *pwUser); err != nil {
+			fmt.Fprintf(os.Stderr, "GAGAL: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 	if *demo {
 		cfg.Demo = true
@@ -212,3 +230,77 @@ func (it *idleTimer) touch() {
 func (it *idleTimer) fire() { it.once.Do(func() { close(it.done) }) }
 
 func (it *idleTimer) expired() <-chan struct{} { return it.done }
+
+// setPassword menulis berkas kredensial: hash PBKDF2 dan rahasia sesi BARU.
+//
+// Rahasia selalu diganti, jadi mengganti kata sandi sekaligus me-logout semua
+// sesi yang ada — termasuk HP yang tertinggal dalam keadaan masuk.
+//
+// Berkasnya 0640 root:issboard: issboard boleh membaca untuk memeriksa login,
+// tapi tidak bisa menulisnya, dan user lain tidak bisa membaca hash-nya.
+func setPassword(path, name string) error {
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("jalankan sebagai root: sudo issboard -set-password")
+	}
+	gid := -1
+	if g, err := user.LookupGroup("issboard"); err == nil {
+		gid, _ = strconv.Atoi(g.Gid)
+	} else {
+		fmt.Fprintln(os.Stderr, "PERINGATAN: grup issboard tidak ada — berkas akan milik root saja, "+
+			"dan dashboard tidak bisa membacanya sampai grupnya dibuat.")
+	}
+
+	pw, err := readSecret("Kata sandi baru: ")
+	if err != nil {
+		return err
+	}
+	if len([]rune(pw)) < 10 {
+		return fmt.Errorf("kata sandi minimal 10 karakter")
+	}
+	again, err := readSecret("Ulangi: ")
+	if err != nil {
+		return err
+	}
+	if pw != again {
+		return fmt.Errorf("kedua kata sandi tidak sama")
+	}
+
+	h, err := auth.HashPassword(pw)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := auth.Save(path, auth.Credentials{User: name, Hash: h, Secret: auth.NewSecret()}, gid); err != nil {
+		return err
+	}
+	fmt.Printf("Tersimpan di %s untuk user %q. Semua sesi lama ter-logout.\n", path, name)
+	return nil
+}
+
+// Satu pembaca untuk seluruh proses: pembaca baru per panggilan bisa menelan
+// baris kedua ke penyangganya saat masukan disalurkan lewat pipa.
+var stdin = bufio.NewReader(os.Stdin)
+
+// readSecret membaca satu baris tanpa gema kalau stdin adalah terminal.
+// Memakai stty, bukan pustaka terminal: janji nol dependensi tetap utuh, dan
+// stty ada di tiap sistem yang punya terminal untuk diketik.
+func readSecret(prompt string) (string, error) {
+	fmt.Fprint(os.Stderr, prompt)
+	echoOff := exec.Command("stty", "-echo")
+	echoOff.Stdin = os.Stdin
+	if echoOff.Run() == nil {
+		defer func() {
+			on := exec.Command("stty", "echo")
+			on.Stdin = os.Stdin
+			_ = on.Run()
+			fmt.Fprintln(os.Stderr)
+		}()
+	}
+	line, err := stdin.ReadString('\n')
+	if err != nil && line == "" {
+		return "", fmt.Errorf("tidak ada masukan: %w", err)
+	}
+	return strings.TrimRight(line, "\r\n"), nil
+}

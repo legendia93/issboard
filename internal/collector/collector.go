@@ -85,6 +85,19 @@ func NewCache() *Cache {
 	return c
 }
 
+// Invalidate membuang seluruh cache, dipakai sesudah aksi supaya permintaan
+// berikutnya memperlihatkan akibatnya — bukan keadaan sebelum tombol ditekan
+// yang masih segar selama TTL.
+func (c *Cache) Invalidate() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pools.at = time.Time{}
+	c.datasets.at = time.Time{}
+	c.containers.at = time.Time{}
+	c.host.at = time.Time{}
+	c.smart.at = time.Time{}
+}
+
 // Options yang dibutuhkan collector dari konfigurasi.
 type Options struct {
 	SmartCache   string

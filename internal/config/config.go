@@ -40,6 +40,11 @@ type Config struct {
 	// Pola `pool/data/*` ikut mencakup keturunannya.
 	SnapExempt []string
 
+	// AuthFile: kredensial operator (hash kata sandi + rahasia sesi), ditulis
+	// `issboard -set-password`. Berkas yang tidak ada = semua endpoint
+	// bermutasi menolak. Bagian baca tetap terbuka seperti sebelumnya.
+	AuthFile string
+
 	// --- Di bawah ini hanya dipakai issboard-agent (unit bertimer terpisah).
 	//
 	// 🔴 issboard sendiri TIDAK PERNAH memakainya untuk mengirim apa pun.
@@ -88,6 +93,8 @@ func Default() Config {
 		DockerSocket: "/var/run/docker.sock",
 
 		SnapPolicyFile: "/etc/sanoid/sanoid.conf",
+
+		AuthFile: "/etc/issboard/auth",
 
 		HistoryFile: "/var/lib/issboard/history.json",
 		AlertState:  "/var/lib/issboard/alert-state.json",
@@ -142,6 +149,8 @@ func Load(path string) (Config, error) {
 			c.SnapPolicyFile = val
 		case "snapshot_exempt":
 			c.SnapExempt = splitList(val)
+		case "auth_file":
+			c.AuthFile = val
 		case "demo":
 			c.Demo = val == "true" || val == "yes" || val == "1"
 		case "history_file":
