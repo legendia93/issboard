@@ -49,6 +49,20 @@ func TestStatusMemuatVonis(t *testing.T) {
 	}
 }
 
+// Aset statis tidak boleh basi di CDN, dan API tidak boleh disimpan di mana pun.
+func TestCacheControl(t *testing.T) {
+	cfg := config.Default()
+	cfg.Demo = true
+	h := srv(cfg)
+	for path, want := range map[string]string{"/api/v1/session": "no-store", "/style.css": "no-cache"} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if got := w.Header().Get("Cache-Control"); got != want {
+			t.Errorf("%s: Cache-Control %q, harus %q", path, got, want)
+		}
+	}
+}
+
 func TestHeaderKeamanan(t *testing.T) {
 	cfg := config.Default()
 	cfg.Demo = true

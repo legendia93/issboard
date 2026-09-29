@@ -99,3 +99,28 @@ func TestSesiMelaporkanBelumDiatur(t *testing.T) {
 		t.Error("token CSRF dibagikan tanpa sesi")
 	}
 }
+
+func TestClientIPHanyaPercayaProxyLokal(t *testing.T) {
+	cases := []struct {
+		remote, cf, xff, want string
+	}{
+		{"127.0.0.1:5000", "203.0.113.9", "", "203.0.113.9"},
+		{"127.0.0.1:5000", "", "10.0.0.1, 198.51.100.7", "198.51.100.7"},
+		{"127.0.0.1:5000", "bukan-ip", "", "127.0.0.1"},
+		// Dari tailnet, header palsu diabaikan.
+		{"100.64.0.5:5000", "203.0.113.9", "198.51.100.7", "100.64.0.5"},
+	}
+	for _, c := range cases {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.RemoteAddr = c.remote
+		if c.cf != "" {
+			r.Header.Set("CF-Connecting-IP", c.cf)
+		}
+		if c.xff != "" {
+			r.Header.Set("X-Forwarded-For", c.xff)
+		}
+		if got := clientIP(r); got != c.want {
+			t.Errorf("%+v: dapat %s", c, got)
+		}
+	}
+}

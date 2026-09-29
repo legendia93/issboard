@@ -7,6 +7,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/legendia93/issboard/internal/auth"
@@ -75,6 +76,22 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		// 🔴 Cache ditentukan di sini, bukan diserahkan ke bawaan CDN.
+		//
+		// Di belakang Cloudflare, .css dan .js di-cache di edge menurut
+		// ekstensinya. Setelah upgrade, HTML baru tersaji bersama style.css
+		// LAMA — halaman kelola tampil tanpa gaya sama sekali, dan hanya lewat
+		// domain itu; lewat tailnet semuanya benar. Aset ter-embed tidak punya
+		// waktu ubah, jadi tidak ada validator yang bisa dipakai: no-cache
+		// memaksa diambil ulang, dan ukurannya cuma puluhan KB.
+		//
+		// API tidak boleh disimpan di mana pun: /session membawa token CSRF,
+		// /status memuat peta host.
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set("Cache-Control", "no-store")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

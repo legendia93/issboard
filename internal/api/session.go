@@ -60,10 +60,34 @@ func (s *Server) session(r *http.Request) (auth.Credentials, auth.Session, bool)
 	return c, sess, ok
 }
 
+// clientIP adalah alamat yang dipakai pembatas login dan log audit.
+//
+// Di belakang cloudflared (service di host yang sama), SEMUA permintaan datang
+// dari 127.0.0.1. Tanpa membaca header proxy, pembatas login jadi satu
+// hitungan global — siapa pun di internet bisa mengunci pemiliknya dengan lima
+// tebakan salah — dan audit mencatat alamat yang sama untuk semua orang.
+//
+// Header itu dipercaya HANYA kalau koneksinya dari loopback: dari tailnet atau
+// LAN, siapa pun bisa menulis CF-Connecting-IP sesukanya dan memilih sendiri
+// alamat yang dihitung pembatas.
 func clientIP(r *http.Request) string {
 	h, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		h = r.RemoteAddr
+	}
+	if ip := net.ParseIP(h); ip == nil || !ip.IsLoopback() {
+		return h
+	}
+	if v := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); net.ParseIP(v) != nil {
+		return v
+	}
+	// X-Forwarded-For: yang paling kanan ditambahkan proxy terdekat — satu-
+	// satunya yang tidak bisa diisi pengirim.
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		if v := strings.TrimSpace(parts[len(parts)-1]); net.ParseIP(v) != nil {
+			return v
+		}
 	}
 	return h
 }
