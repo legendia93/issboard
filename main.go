@@ -109,8 +109,18 @@ func main() {
 		}
 	}
 
+	apiSrv := api.New(cfg, collector.NewCache(), idle.touch)
+	// Dipanggil sesudah halaman kelola menyimpan pengaturan. Flag -demo tetap
+	// berlaku: memuat ulang berkas tidak boleh diam-diam mematikan mode demo
+	// dan membuat halaman palsu mulai menyentuh sistem sungguhan.
+	apiSrv.Reload = func() (config.Config, error) {
+		c, err := config.Load(*cfgPath)
+		c.Demo = c.Demo || *demo
+		return c, err
+	}
+
 	srv := &http.Server{
-		Handler:           api.New(cfg, collector.NewCache(), idle.touch).Routes(newAssets(static, *webDir == "")),
+		Handler:           apiSrv.Routes(newAssets(static, *webDir == "")),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

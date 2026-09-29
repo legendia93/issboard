@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/legendia93/issboard/internal/config"
 )
 
 // Executor mengerjakan permintaan di sisi root. Semua sentuhan ke sistem
@@ -17,11 +19,16 @@ import (
 type Executor struct {
 	Run       func(ctx context.Context, name string, args ...string) (string, error)
 	ReadFile  func(path string) ([]byte, error)
-	WriteFile func(path string, data []byte) error
+	WriteFile func(path string, data []byte, perm os.FileMode) error
 	Remove    func(path string) error
 	// PersistDir adalah folder modprobe.d; bisa diganti di test.
 	PersistDir string
 	Now        func() time.Time
+	// AgentEnv dan SettingsFile: berkas pengaturan notifikasi dan aplikasi;
+	// AgentBin: issboard-agent untuk tes kirim. Bisa diganti di test.
+	AgentEnv     string
+	SettingsFile string
+	AgentBin     string
 }
 
 // NewExecutor memakai sistem sungguhan.
@@ -35,11 +42,14 @@ func NewExecutor() *Executor {
 			}
 			return string(out), nil
 		},
-		ReadFile:   os.ReadFile,
-		WriteFile:  writeAtomic,
-		Remove:     os.Remove,
-		PersistDir: ModprobeDir,
-		Now:        time.Now,
+		ReadFile:     os.ReadFile,
+		WriteFile:    writeAtomic,
+		Remove:       os.Remove,
+		PersistDir:   ModprobeDir,
+		Now:          time.Now,
+		AgentEnv:     AgentEnvFile,
+		SettingsFile: config.SettingsFile,
+		AgentBin:     agentBin(),
 	}
 }
 
@@ -147,6 +157,15 @@ func (e *Executor) handle(ctx context.Context, req Request) (string, error) {
 			return "", err
 		}
 		return req.Prop + "=" + req.PropValue + " pada " + ds, nil
+
+	case NotifyStatus:
+		return e.notifyStatus()
+	case NotifySet:
+		return e.notifySet(req.Props)
+	case NotifyTest:
+		return e.notifyTest(ctx)
+	case SettingsSet:
+		return e.settingsSet(req.Props)
 
 	case SanoidRun:
 		// Lewat unit-nya, bukan memanggil sanoid langsung: unit itulah yang
@@ -314,7 +333,7 @@ func (e *Executor) setARC(v int64, persist bool) (string, error) {
 		}
 	}
 
-	if err := e.WriteFile(ARCParam, []byte(strconv.FormatInt(v, 10)+"\n")); err != nil {
+	if err := e.WriteFile(ARCParam, []byte(strconv.FormatInt(v, 10)+"\n"), 0o644); err != nil {
 		return "", fmt.Errorf("tulis %s: %w", ARCParam, err)
 	}
 
@@ -337,7 +356,7 @@ func (e *Executor) setARC(v int64, persist bool) (string, error) {
 		} else {
 			body := "# Ditulis issboard-helper. Hapus berkas ini untuk kembali ke bawaan ZFS.\n" +
 				"options zfs zfs_arc_max=" + strconv.FormatInt(v, 10) + "\n"
-			if err := e.WriteFile(own, []byte(body)); err != nil {
+			if err := e.WriteFile(own, []byte(body), 0o644); err != nil {
 				return strings.Join(msg, "; "), fmt.Errorf("tulis %s: %w", own, err)
 			}
 			msg = append(msg, "disimpan di "+own)
@@ -348,20 +367,23 @@ func (e *Executor) setARC(v int64, persist bool) (string, error) {
 
 // writeAtomic menulis lewat berkas sementara lalu rename, kecuali untuk /sys:
 // berkas parameter modul bukan berkas biasa dan harus ditulis langsung.
-func writeAtomic(path string, data []byte) error {
+//
+// Mode dipasang SEBELUM isinya ditulis: berkas kredensial yang sempat 0644
+// walau sepersekian detik adalah berkas kredensial yang bocor.
+func writeAtomic(path string, data []byte, perm os.FileMode) error {
 	if strings.HasPrefix(path, "/sys/") {
-		return os.WriteFile(path, data, 0o644)
+		return os.WriteFile(path, data, perm)
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".issboard-*")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
+	if err := tmp.Chmod(perm); err != nil {
 		tmp.Close()
 		return err
 	}
-	if err := tmp.Chmod(0o644); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		return err
 	}

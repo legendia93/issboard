@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/legendia93/issboard/internal/alert"
@@ -39,6 +40,7 @@ func run() int {
 	cfgPath := flag.String("config", "/etc/issboard.yaml", "berkas konfigurasi")
 	demo := flag.Bool("demo", false, "data palsu; tidak menyentuh sistem dan tidak menulis berkas apa pun")
 	dry := flag.Bool("dry-run", false, "cetak pesannya, jangan kirim, jangan tandai sudah dikabari")
+	test := flag.Bool("test", false, "kirim SATU pesan uji ke semua kanal lalu keluar; tidak mengumpulkan, tidak menulis apa pun")
 	flag.Parse()
 
 	cfg, err := config.Load(*cfgPath)
@@ -56,6 +58,10 @@ func run() int {
 		NtfyToken:      cfg.NtfyToken,
 		TelegramToken:  cfg.TelegramToken,
 		TelegramChatID: cfg.TelegramChatID,
+	}
+
+	if *test {
+		return sendTest(ch, cfg)
 	}
 
 	// Batas waktu keseluruhan. Agent ini dipanggil tiap menit: satu jalannya
@@ -208,4 +214,29 @@ func writeHistory(path string, snap *collector.Snapshot) {
 	if err := history.Save(path, h); err != nil {
 		log.Printf("agent: menulis riwayat %s: %v", path, err)
 	}
+}
+
+// sendTest dipakai tombol "kirim tes" di halaman kelola (lewat helper dan
+// systemd-run, dengan user dan agent.env yang sama dengan timernya). Ia tidak
+// menyentuh riwayat maupun ingatan "sudah dikabari": tes yang diam-diam
+// menandai temuan sebagai sudah dikabari akan menelan notifikasi sungguhan.
+func sendTest(ch notify.Config, cfg config.Config) int {
+	if !ch.Enabled() {
+		fmt.Println("tidak ada kanal notifikasi yang terisi — isi token & chat id Telegram, atau topik ntfy")
+		return 1
+	}
+	host, _ := os.Hostname()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	err := ch.Send(ctx, notify.Message{
+		Title:    "issboard: pesan uji dari " + host,
+		Body:     "Kalau pesan ini sampai, kanal notifikasi bekerja. Dikirim dari halaman kelola; tidak ada temuan yang berubah.",
+		Resolved: true,
+	})
+	if err != nil {
+		fmt.Printf("gagal: %v\n", err)
+		return 1
+	}
+	fmt.Printf("terkirim lewat %s (level minimum %s)\n", strings.Join(ch.Channels(), ", "), cfg.NotifyMinLevel)
+	return 0
 }

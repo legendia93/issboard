@@ -41,10 +41,10 @@ func (e unavailable) Error() string { return e.err.Error() }
 func (e unavailable) Unwrap() error { return e.err }
 
 func (s *Server) creds() (auth.Credentials, error) {
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		return s.demoCreds, nil
 	}
-	return auth.Load(s.cfg.AuthFile)
+	return auth.Load(s.conf().AuthFile)
 }
 
 func (s *Server) session(r *http.Request) (auth.Credentials, auth.Session, bool) {
@@ -112,7 +112,7 @@ func sameOrigin(r *http.Request) bool {
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	_, err := s.creds()
-	out := map[string]any{"configured": err == nil, "authenticated": false, "demo": s.cfg.Demo}
+	out := map[string]any{"configured": err == nil, "authenticated": false, "demo": s.conf().Demo}
 	if err != nil && !errors.Is(err, auth.ErrNotConfigured) {
 		// Berkas ada tapi rusak atau tak terbaca: itu harus terlihat, bukan
 		// menyamar jadi "belum diatur".

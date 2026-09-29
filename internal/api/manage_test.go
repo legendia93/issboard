@@ -27,6 +27,9 @@ var mutasi = []struct{ path, body string }{
 	{"/api/v1/datasets", `{"parent":"pool-cepat","name":"baru","props":{"compression":"zstd"}}`},
 	{"/api/v1/datasets/props", `{"dataset":"pool-cepat/app","prop":"atime","value":"off"}`},
 	{"/api/v1/sanoid/run", ""},
+	{"/api/v1/settings/notify", `{"values":{"ISSBOARD_TELEGRAM_CHAT_ID":"-100123"}}`},
+	{"/api/v1/settings/notify/test", ""},
+	{"/api/v1/settings/app", `{"values":{"alert_repeat":"6h"}}`},
 }
 
 // Kunci terpenting fase 7: tanpa sesi harus 401, bukan 200 yang diam-diam
@@ -99,9 +102,35 @@ func TestAksiDenganSesiDemo(t *testing.T) {
 		{"/api/v1/datasets", `{"parent":"pool-cepat","name":"../x"}`},
 		{"/api/v1/datasets", `{"parent":"pool-cepat","name":"x","props":{"mountpoint":"/"}}`},
 		{"/api/v1/datasets/props", `{"dataset":"pool-cepat/app","prop":"mountpoint","value":"/"}`},
+		{"/api/v1/settings/notify", `{"values":{"ISSBOARD_TELEGRAM_CHAT_ID":"-1\nLD_PRELOAD=x"}}`},
+		{"/api/v1/settings/notify", `{"values":{"PATH":"/tmp"}}`},
+		{"/api/v1/settings/app", `{"values":{"history_file":"/tmp/x"}}`},
+		{"/api/v1/settings/app", `{"values":{}}`},
 	} {
 		if w := post(h, m.path, m.body, ok); w.Code != http.StatusBadRequest {
 			t.Errorf("%s %s: HTTP %d, harus 400", m.path, m.body, w.Code)
 		}
+	}
+}
+
+// Keadaan kredensial bukan untuk siapa pun yang bisa membuka dashboard baca.
+func TestPengaturanButuhSesi(t *testing.T) {
+	cfg := config.Default()
+	cfg.Demo = true
+	h := srv(cfg)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/settings", nil))
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("tanpa sesi: HTTP %d, harus 401", w.Code)
+	}
+
+	ck, _, _ := login(t, h, "demo", "demo")
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/settings", nil)
+	r.Header.Set("Cookie", ck)
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"alert_repeat"`) ||
+		!strings.Contains(w.Body.String(), "ISSBOARD_TELEGRAM_TOKEN") {
+		t.Errorf("dengan sesi: HTTP %d %s", w.Code, w.Body.String())
 	}
 }

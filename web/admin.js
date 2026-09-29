@@ -108,7 +108,7 @@ async function login(ev) {
     $('login-pw').value = '';
     if (!b.ok) { log.textContent = b.error || ('HTTP ' + r.status); log.hidden = false; return; }
     await loadSession();
-    await Promise.all([tick(), loadManage()]);
+    await Promise.all([tick(), loadManage(), currentSection() === 'pengaturan' ? loadSettings() : null]);
   } catch (e) {
     log.textContent = e.message;
     log.hidden = false;
@@ -125,7 +125,7 @@ async function logout() {
 /* ---------- navigasi ----------
    Satu bagian terlihat pada satu waktu, dipilih lewat hash — jadi tiap bagian
    bisa di-bookmark (admin.html#dataset), dan tombol kembali browser bekerja. */
-const SECTIONS = ['container', 'pool', 'dataset', 'disk', 'arc', 'sanoid', 'jadwal', 'riwayat'];
+const SECTIONS = ['container', 'pool', 'dataset', 'disk', 'arc', 'sanoid', 'jadwal', 'pengaturan', 'riwayat'];
 
 function currentSection() {
   const h = location.hash.slice(1);
@@ -140,6 +140,7 @@ function showSection() {
     if (a.dataset.sec === cur) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   }
   if (cur === 'dataset' && !DS) loadDataset();
+  if (cur === 'pengaturan' && SESSION.authenticated) loadSettings();
   window.scrollTo(0, 0);
 }
 
@@ -776,6 +777,166 @@ function renderSchedule() {
   box.append(sc);
 }
 
+/* ---------- pengaturan ----------
+   Diambil saat bagian ini dibuka dan sesudah menyimpan, BUKAN tiap 15 detik:
+   form ini diisi dari jawabannya, dan mengisi ulang di tengah mengetik akan
+   menghapus isian. Nilai rahasia tidak pernah datang dari server — hanya
+   petunjuk empat karakter terakhir — jadi kolomnya selalu kosong. */
+let SETTINGS = null;
+const NF_KEYS = ['ISSBOARD_TELEGRAM_TOKEN', 'ISSBOARD_TELEGRAM_CHAT_ID', 'ISSBOARD_NTFY_URL', 'ISSBOARD_NTFY_TOPIC', 'ISSBOARD_NTFY_TOKEN'];
+
+async function loadSettings() {
+  try {
+    const r = await fetch('api/v1/settings', { cache: 'no-store' });
+    if (r.status === 401) { await loadSession(); return; }
+    SETTINGS = await r.json();
+  } catch (e) {
+    SETTINGS = { error: e.message };
+  }
+  fillSettings();
+}
+
+function srcText(src) {
+  if (!src) return 'bawaan program';
+  if (src.endsWith('settings.conf')) return 'diatur dari halaman ini (' + src + ')';
+  return 'dari ' + src;
+}
+
+function fillSettings() {
+  const s = SETTINGS;
+  const note = $('set-note');
+  note.hidden = !(s && (s.error || s.notify_error));
+  if (s && s.error) note.textContent = 'gagal memuat pengaturan: ' + s.error;
+  else if (s && s.notify_error) note.textContent = 'kredensial notifikasi tidak terbaca: ' + s.notify_error;
+  if (!s || s.error) return;
+
+  // Notifikasi
+  const n = s.notify || {};
+  for (const k of NF_KEYS) {
+    const inp = $('nf-' + k);
+    const v = n[k] || {};
+    if (inp.dataset.secret) {
+      inp.value = '';
+      inp.placeholder = v.set ? `terisi ${v.hint} — kosongkan untuk tidak mengubah` : 'belum diisi';
+      const del = $('nfdel-' + k);
+      del.checked = false;
+      del.disabled = !v.set;
+    } else {
+      inp.value = v.value || '';
+      inp.dataset.orig = v.value || '';
+    }
+  }
+  const st = $('notify-status');
+  clear(st);
+  const tg = n.ISSBOARD_TELEGRAM_TOKEN && n.ISSBOARD_TELEGRAM_TOKEN.set && n.ISSBOARD_TELEGRAM_CHAT_ID && n.ISSBOARD_TELEGRAM_CHAT_ID.set;
+  const nt = n.ISSBOARD_NTFY_TOPIC && n.ISSBOARD_NTFY_TOPIC.set;
+  st.append(el('span', { class: 'n-pill' + (tg ? '' : ' n-pill-warn') }, tg ? 'telegram aktif' : 'telegram mati'),
+    el('span', { class: 'n-pill' }, nt ? 'ntfy aktif' : 'ntfy mati'));
+  if (!tg && !nt) st.append(el('span', { class: 'n-pill n-pill-crit' }, 'tidak ada kanal — alert tidak terkirim ke mana pun'));
+
+  // Aplikasi
+  const app = Object.fromEntries((s.app || []).map((a) => [a.key, a]));
+  for (const k of ['notify_min_level', 'alert_repeat', 'idle_timeout']) {
+    const sel = $('as-' + k);
+    const v = (app[k] || {}).value || '';
+    // Nilai yang ditulis tangan di config bisa di luar pilihan; tampilkan apa
+    // adanya daripada diam-diam menggantinya dengan pilihan terdekat.
+    if (v && ![...sel.options].some((o) => o.value === v)) sel.append(el('option', { value: v }, v + ' (dari berkas)'));
+    sel.value = v;
+    sel.dataset.orig = v;
+  }
+  const ex = $('as-snapshot_exempt');
+  ex.value = ((app.snapshot_exempt || {}).value || '').split(',').map((x) => x.trim()).filter(Boolean).join('\n');
+  ex.dataset.orig = ex.value;
+
+  const chosen = ((app.pools || {}).value || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const pb = $('as-pools');
+  clear(pb);
+  for (const p of s.pool_names || []) {
+    const cb = el('input', { type: 'checkbox', value: p, checked: chosen.includes(p) });
+    pb.append(el('label', { class: 'check' }, cb, ' ' + p));
+  }
+  if (!(s.pool_names || []).length) pb.append(el('span', { class: 'note' }, 'tidak ada pool terbaca'));
+  pb.dataset.orig = chosen.join(', ');
+
+  for (const p of document.querySelectorAll('.note.src')) {
+    const a = app[p.dataset.src] || {};
+    clear(p);
+    p.append(srcText(a.source));
+    if (a.source && a.source.endsWith('settings.conf')) {
+      const b = el('button', { class: 'n-btn n-btn-sm', type: 'button' }, 'kembalikan');
+      b.title = 'hapus nilai ini dari settings.conf; /etc/issboard.yaml atau bawaan berlaku lagi';
+      b.addEventListener('click', () => act('settings.app', 'api/v1/settings/app', { values: { [p.dataset.src]: '' } }, {
+        title: `Kembalikan ${p.dataset.src}`,
+        text: 'Nilai dari halaman ini dihapus dari settings.conf; nilai di /etc/issboard.yaml (atau bawaan program) berlaku lagi.',
+        okLabel: 'kembalikan',
+      }).then(loadSettings));
+      p.append(b);
+    }
+  }
+  gateForm($('notify-form'), 'settings.notify');
+  gateForm($('app-form'), 'settings.app');
+}
+
+function submitNotify(ev) {
+  ev.preventDefault();
+  const values = {};
+  for (const k of NF_KEYS) {
+    const inp = $('nf-' + k);
+    const v = inp.value.trim();
+    if (inp.dataset.secret) {
+      if ($('nfdel-' + k).checked) values[k] = '';
+      else if (v) values[k] = v;
+    } else if (v !== inp.dataset.orig) {
+      values[k] = v;
+    }
+  }
+  const keys = Object.keys(values);
+  if (!keys.length) { note(false, 'settings.notify', 'tidak ada yang diubah'); return; }
+  const label = (k) => k.replace('ISSBOARD_', '').toLowerCase().replace(/_/g, ' ');
+  act('settings.notify', 'api/v1/settings/notify', { values }, {
+    title: 'Simpan pengaturan notifikasi',
+    text: 'Yang berubah: ' + keys.map((k) => label(k) + (values[k] === '' ? ' (dihapus)' : '')).join(', ') +
+      '. Ditulis ke /etc/issboard/agent.env dan berlaku di putaran agent berikutnya. ' +
+      'Temuan yang sudah pernah dikabari tidak dikirim ulang ke kanal baru — pakai "kirim tes" untuk memastikan kanalnya bekerja.',
+    okLabel: 'simpan',
+  }).then((ok) => { if (ok) loadSettings(); });
+}
+
+function submitApp(ev) {
+  ev.preventDefault();
+  const values = {};
+  for (const k of ['notify_min_level', 'alert_repeat', 'idle_timeout']) {
+    const sel = $('as-' + k);
+    if (sel.value !== sel.dataset.orig) values[k] = sel.value;
+  }
+  const ex = $('as-snapshot_exempt');
+  if (ex.value.trim() !== ex.dataset.orig.trim()) {
+    values.snapshot_exempt = ex.value.split('\n').map((x) => x.trim()).filter(Boolean).join(', ');
+  }
+  const pools = [...$('as-pools').querySelectorAll('input:checked')].map((c) => c.value).join(', ');
+  if (pools !== $('as-pools').dataset.orig) values.pools = pools;
+
+  const keys = Object.keys(values);
+  if (!keys.length) { note(false, 'settings.app', 'tidak ada yang diubah'); return; }
+  act('settings.app', 'api/v1/settings/app', { values }, {
+    title: 'Simpan pengaturan aplikasi',
+    text: 'Yang berubah: ' + keys.join(', ') + '. Ditulis ke /etc/issboard/settings.conf. Dashboard memakainya sekarang; ' +
+      'agent di putaran berikutnya.' + (values.pools !== undefined ? ' Pool yang tidak ditampilkan juga tidak bisa dikelola dari sini.' : '') +
+      (values.idle_timeout ? ' Idle timeout berlaku mulai proses dashboard berikutnya.' : ''),
+    okLabel: 'simpan',
+  }).then((ok) => { if (ok) loadSettings(); });
+}
+
+function testNotify() {
+  act('settings.notify.test', 'api/v1/settings/notify/test', null, {
+    title: 'Kirim pesan uji',
+    text: 'Mengirim satu pesan uji ke semua kanal yang terisi, lewat agent dengan pengaturan yang sama dengan timernya. ' +
+      'Tidak ada temuan yang ditandai sudah dikabari.',
+    okLabel: 'kirim',
+  });
+}
+
 /* ---------- mulai ---------- */
 function init() {
   initTheme();
@@ -788,11 +949,15 @@ function init() {
   $('snap-form').addEventListener('submit', submitSnap);
   $('prop-form').addEventListener('submit', submitProp);
   $('child-form').addEventListener('submit', submitChild);
+  $('notify-form').addEventListener('submit', submitNotify);
+  $('app-form').addEventListener('submit', submitApp);
+  $('notify-test').addEventListener('click', testNotify);
   window.addEventListener('hashchange', showSection);
   showSection();
   renderHistory();
 
-  loadSession().then(() => Promise.all([tick(), loadManage()]));
+  loadSession().then(() => Promise.all([tick(), loadManage(),
+    SESSION.authenticated && currentSection() === 'pengaturan' ? loadSettings() : null]));
   setInterval(tick, REFRESH_MS);
   // Jadwal dan ARC jarang berubah; setengah kecepatan status sudah cukup.
   setInterval(() => { if (!document.hidden && SESSION.authenticated) loadManage(); }, 2 * REFRESH_MS);

@@ -187,7 +187,9 @@ start/stop/restart/hapus container, scrub mulai/jeda/hentikan, SMART tes
 singkat/panjang, batas ARC, buat/hapus snapshot, buat dataset anak, ubah
 properti dataset, jalankan sanoid (plus potongan `sanoid.conf` untuk dataset
 yang belum tercakup — issboard tidak menulis berkas itu), dan daftar jadwal
-otomatis (timer systemd, cron, smartd). Semua aksi **mati** sampai kata sandi operator diatur:
+otomatis (timer systemd, cron, smartd), serta **pengaturan**: token & chat id
+Telegram, ntfy, tombol kirim tes, level notifikasi, jeda pengingat,
+`snapshot_exempt`, dan saringan pool. Semua aksi **mati** sampai kata sandi operator diatur:
 
 ```bash
 sudo issboard -set-password              # user bawaan "admin"; -user untuk nama lain
@@ -352,6 +354,10 @@ adalah satu-satunya tempat hal itu bisa ketahuan.
 | `POST /api/v1/datasets` | `{"parent", "name", "props": {...}}` |
 | `POST /api/v1/datasets/props` | `{"dataset", "prop", "value"}`; `inherit` untuk kembali mewarisi |
 | `POST /api/v1/sanoid/run` | nyalakan `sanoid.service` |
+| `GET /api/v1/settings` | pengaturan aplikasi + asalnya, keadaan kanal notifikasi (tanpa nilai rahasia); butuh sesi |
+| `POST /api/v1/settings/notify` | `{"values": {"ISSBOARD_TELEGRAM_CHAT_ID": "…"}}`; `""` = hapus |
+| `POST /api/v1/settings/notify/test` | kirim satu pesan uji lewat agent |
+| `POST /api/v1/settings/app` | `{"values": {"alert_repeat": "6h"}}` → `/etc/issboard/settings.conf` |
 
 Semua `POST` aksi butuh cookie sesi **dan** header `X-CSRF-Token`; tanpa sesi
 jawabannya 401.

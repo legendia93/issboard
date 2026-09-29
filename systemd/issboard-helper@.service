@@ -4,7 +4,9 @@
 # (internal/ops): zpool scrub/-s/-p, smartctl -t short/long/-X, menulis
 # zfs_arc_max, zfs snapshot, zfs destroy SATU snapshot (tanpa -r), zfs create
 # -u + zfs set/inherit untuk properti tertentu, dan systemctl start
-# issboard-smart.service / sanoid.service. Tiap target dicocokkan dengan
+# issboard-smart.service / sanoid.service, menyunting kunci notifikasi di
+# agent.env dan menulis settings.conf, serta menjalankan tes kirim lewat
+# systemd-run sebagai user issboard. Tiap target dicocokkan dengan
 # daftar dari sistem sebelum apa pun dijalankan.
 #
 # ⚠️ Unit ini punya mount namespace sendiri (ProtectSystem). Karena itu
@@ -28,8 +30,9 @@ TimeoutStartSec=90
 #  - /dev/zfs dan /dev/sdX dibutuhkan zpool dan smartctl → PrivateDevices=no
 #  - /sys/module/zfs/parameters harus bisa ditulis → ProtectKernelTunables=no
 #  - /etc/modprobe.d untuk batas ARC yang selamat reboot → ReadWritePaths
+#  - /etc/issboard untuk agent.env (kunci notifikasi) dan settings.conf
 ProtectSystem=strict
-ReadWritePaths=/etc/modprobe.d
+ReadWritePaths=/etc/modprobe.d /etc/issboard
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes

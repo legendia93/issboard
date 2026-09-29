@@ -175,3 +175,27 @@ snapshot_exempt: kolam/rekaman/*, kolam/scratch ,
 		t.Errorf("tidak boleh ada pengecualian bawaan, dapat %q", d.SnapExempt)
 	}
 }
+
+// Berkas timpaan halaman kelola menang atas config utama, dan asal tiap nilai
+// tercatat — halaman kelola memakainya untuk menjawab "nilai ini dari mana".
+func TestSettingsTimpaanMenang(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "issboard.yaml")
+	over := filepath.Join(dir, "settings.conf")
+	os.WriteFile(main, []byte("alert_repeat: 24h\nnotify_min_level: warn\nsettings_file: "+over+"\n"), 0o644)
+	os.WriteFile(over, []byte("alert_repeat: 6h\nsnapshot_exempt: a/b, c/*\n"), 0o644)
+
+	c, err := Load(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.AlertRepeat != 6*time.Hour || len(c.SnapExempt) != 2 || c.NotifyMinLevel != "warn" {
+		t.Errorf("timpaan tidak berlaku: %v %v %v", c.AlertRepeat, c.SnapExempt, c.NotifyMinLevel)
+	}
+	if c.Sources["alert_repeat"] != over || c.Sources["notify_min_level"] != main {
+		t.Errorf("asal nilai salah: %v", c.Sources)
+	}
+	if _, ada := c.Sources["idle_timeout"]; ada {
+		t.Error("nilai bawaan tercatat punya asal berkas")
+	}
+}

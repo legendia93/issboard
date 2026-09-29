@@ -28,10 +28,10 @@ func (s *Server) actContainer(r *http.Request, _ string) (string, error) {
 	if !collector.ValidContainerAction(act) {
 		return "", bad("aksi container tidak dikenal: %q", act)
 	}
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		return demoOut(act, name), nil
 	}
-	c, err := collector.FindContainer(r.Context(), s.cfg.DockerSocket, name)
+	c, err := collector.FindContainer(r.Context(), s.conf().DockerSocket, name)
 	if err != nil {
 		return "", bad("%v", err)
 	}
@@ -41,7 +41,7 @@ func (s *Server) actContainer(r *http.Request, _ string) (string, error) {
 			return "", bad("container %q masih %s — hentikan dulu sebelum dihapus", name, c.State)
 		}
 	}
-	return collector.ContainerAction(r.Context(), s.cfg.DockerSocket, c.ID, act)
+	return collector.ContainerAction(r.Context(), s.conf().DockerSocket, c.ID, act)
 }
 
 var scrubOps = map[string]string{"start": ops.ScrubStart, "stop": ops.ScrubStop, "pause": ops.ScrubPause}
@@ -52,12 +52,12 @@ func (s *Server) actScrub(r *http.Request, actor string) (string, error) {
 	if !ok {
 		return "", bad("operasi scrub tidak dikenal: %q", r.PathValue("op"))
 	}
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		return demoOut(action, name), nil
 	}
 	// Daftar yang sama dengan yang tampil di dashboard — termasuk saringan
 	// `pools:` di config. Pool yang tidak ditampilkan juga tidak bisa disentuh.
-	pools, err := collector.CollectPools(r.Context(), s.cfg.Pools)
+	pools, err := collector.CollectPools(r.Context(), s.conf().Pools)
 	if err != nil {
 		return "", err
 	}
@@ -88,11 +88,11 @@ func (s *Server) actSmart(r *http.Request, actor string) (string, error) {
 			return "", bad("permintaan tidak terbaca")
 		}
 	}
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		return demoOut(action, body.Device), nil
 	}
 	if action != ops.SmartRefresh {
-		rep, _ := collector.ReadSmartCache(s.cfg.SmartCache)
+		rep, _ := collector.ReadSmartCache(s.conf().SmartCache)
 		found := false
 		for _, d := range rep.Disks {
 			found = found || d.Device == body.Device
@@ -113,7 +113,7 @@ func (s *Server) actARC(r *http.Request, actor string) (string, error) {
 		return "", bad("permintaan tidak terbaca")
 	}
 	a := ops.ReadARCInfo()
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		a = ops.DemoARC()
 	}
 	if !a.Present {
@@ -122,14 +122,14 @@ func (s *Server) actARC(r *http.Request, actor string) (string, error) {
 	if err := ops.ValidateARC(body.MaxBytes, a.MemTotal, a.CMin); err != nil {
 		return "", bad("%v", err)
 	}
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		return demoOut(ops.ARCSet, fmt.Sprint(body.MaxBytes)), nil
 	}
 	return s.helper(r, ops.Request{Action: ops.ARCSet, Value: body.MaxBytes, Persist: body.Persist, Actor: actor})
 }
 
 func (s *Server) helper(r *http.Request, req ops.Request) (string, error) {
-	resp, err := ops.Call(r.Context(), s.cfg.HelperSocket, req)
+	resp, err := ops.Call(r.Context(), s.conf().HelperSocket, req)
 	if errors.Is(err, ops.ErrUnavailable) {
 		return "", unavailable{err}
 	}
@@ -158,11 +158,11 @@ type manageResponse struct {
 }
 
 func (s *Server) handleManage(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		writeJSON(w, http.StatusOK, manageResponse{ARC: ops.DemoARC(), Schedule: ops.DemoSchedule(), Helper: true, Demo: true})
 		return
 	}
-	st, err := os.Stat(s.cfg.HelperSocket)
+	st, err := os.Stat(s.conf().HelperSocket)
 	writeJSON(w, http.StatusOK, manageResponse{
 		ARC:      ops.ReadARCInfo(),
 		Schedule: ops.ReadSchedule(r.Context()),
@@ -176,7 +176,7 @@ func (s *Server) handleManage(w http.ResponseWriter, r *http.Request) {
 // `pools:` — dataset di pool yang tidak ditampilkan juga tidak bisa disentuh.
 func (s *Server) knownDataset(r *http.Request, name string) error {
 	var names []string
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		for _, d := range collector.DemoSnapshot().Datasets {
 			names = append(names, d.Name)
 		}
@@ -193,10 +193,10 @@ func (s *Server) knownDataset(r *http.Request, name string) error {
 	if !found {
 		return bad("dataset %q tidak ada", name)
 	}
-	if len(s.cfg.Pools) > 0 {
+	if len(s.conf().Pools) > 0 {
 		pool, _, _ := strings.Cut(name, "/")
 		ok := false
-		for _, p := range s.cfg.Pools {
+		for _, p := range s.conf().Pools {
 			ok = ok || p == pool
 		}
 		if !ok {
@@ -224,7 +224,7 @@ func (s *Server) handleDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := datasetResponse{Name: name, Specs: ops.PropSpecs()}
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		resp.Props, resp.Snapshots = ops.DemoProps(), ops.DemoSnapshots(name)
 		writeJSON(w, http.StatusOK, resp)
 		return
@@ -261,7 +261,7 @@ func (s *Server) actSnapCreate(r *http.Request, actor string) (string, error) {
 	if err := ops.ValidTag(b.Tag); err != nil {
 		return "", bad("%v", err)
 	}
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		return demoOut(ops.SnapCreate, b.Dataset), nil
 	}
 	return s.helper(r, ops.Request{Action: ops.SnapCreate, Target: b.Dataset, Name: b.Tag, Recursive: b.Recursive, Actor: actor})
@@ -281,7 +281,7 @@ func (s *Server) actSnapDestroy(r *http.Request, actor string) (string, error) {
 	if err := s.knownDataset(r, ds); err != nil {
 		return "", err
 	}
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		return demoOut(ops.SnapDestroy, b.Snapshot), nil
 	}
 	snaps, err := ops.ListSnapshots(r.Context(), ds)
@@ -321,7 +321,7 @@ func (s *Server) actDSCreate(r *http.Request, actor string) (string, error) {
 			return "", bad("%v", err)
 		}
 	}
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		return demoOut(ops.DSCreate, b.Parent+"/"+b.Name), nil
 	}
 	return s.helper(r, ops.Request{Action: ops.DSCreate, Target: b.Parent, Name: b.Name, Props: b.Props, Actor: actor})
@@ -342,14 +342,14 @@ func (s *Server) actDSSet(r *http.Request, actor string) (string, error) {
 	if err := ops.ValidateProp(b.Prop, b.Value); err != nil {
 		return "", bad("%v", err)
 	}
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		return demoOut(ops.DSSet, b.Dataset+" "+b.Prop+"="+b.Value), nil
 	}
 	return s.helper(r, ops.Request{Action: ops.DSSet, Target: b.Dataset, Prop: b.Prop, PropValue: b.Value, Actor: actor})
 }
 
 func (s *Server) actSanoid(r *http.Request, actor string) (string, error) {
-	if s.cfg.Demo {
+	if s.conf().Demo {
 		return demoOut(ops.SanoidRun, ""), nil
 	}
 	return s.helper(r, ops.Request{Action: ops.SanoidRun, Actor: actor})

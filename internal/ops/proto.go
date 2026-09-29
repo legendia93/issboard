@@ -42,6 +42,11 @@ const (
 	DSCreate    = "ds.create"
 	DSSet       = "ds.set"
 	SanoidRun   = "sanoid.run"
+
+	NotifyStatus = "notify.status"
+	NotifySet    = "notify.set"
+	NotifyTest   = "notify.test"
+	SettingsSet  = "settings.set"
 )
 
 type Request struct {

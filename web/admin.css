@@ -218,3 +218,16 @@ code { font-family: var(--font-mono); font-size: 0.95em; }
    — ia ada juga di dashboard, dan tiap aksi memberi kabarnya sendiri. */
 @media (max-width: 560px) { #updated { display: none; } }
 .mrow.off .mname, .mrow.off .mmeta.mono { opacity: .5; }
+
+.field textarea {
+  font: inherit; font-family: var(--font-mono); font-size: 13px;
+  color: var(--n-ink); background: var(--n-surface);
+  border: 1px solid var(--n-line); border-radius: var(--n-radius-sm);
+  padding: 9px 12px; width: 100%; min-width: 0; resize: vertical;
+}
+.field textarea:focus { outline: none; border-color: var(--n-line-strong); }
+.pools-field { border: 0; padding: 0; margin: 0; }
+.pools-field legend { margin-bottom: 6px; }
+.note.src { margin: -6px 0 0; font-size: 11px; }
+.note.src button { margin-left: 6px; }
+.pools-field .check { white-space: nowrap; flex: none; }

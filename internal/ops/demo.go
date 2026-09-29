@@ -69,3 +69,13 @@ func DemoProps() []Prop {
 		{"reservation", "none", "default"},
 	}
 }
+
+func DemoNotify() map[string]NotifyValue {
+	return map[string]NotifyValue{
+		"ISSBOARD_TELEGRAM_TOKEN":   {Set: true, Hint: "••••Wx9z", Secret: true},
+		"ISSBOARD_TELEGRAM_CHAT_ID": {Set: true, Value: "-1000000000000"},
+		"ISSBOARD_NTFY_URL":         {},
+		"ISSBOARD_NTFY_TOPIC":       {Secret: true},
+		"ISSBOARD_NTFY_TOKEN":       {Secret: true},
+	}
+}

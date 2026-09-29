@@ -159,6 +159,43 @@ sudah diatur di `/etc/modprobe.d/zfs.conf`, dan helper menolak "simpan
 permanen" sambil menyebut berkas itu. Halaman kelola sekarang mematikan pilihan
 itu di depan dan menjelaskan jalan keluarnya, bukan menunggu ditolak.
 
+## Pengaturan notifikasi & aplikasi (29 September 2026)
+
+Diminta pemilik setelah pemasangan: token dan chat id Telegram harus bisa
+diganti tanpa SSH. Bagian **pengaturan** di halaman kelola:
+
+| Pengaturan | Disimpan di | Oleh |
+|---|---|---|
+| token & chat id Telegram, server/topik/token ntfy | `/etc/issboard/agent.env` (0600 root) | helper, hanya kunci yang dikelola |
+| level notifikasi, jeda pengingat, idle timeout, `snapshot_exempt`, saringan pool | `/etc/issboard/settings.conf` (timpaan) | helper |
+| kirim tes | — | `systemd-run` sebagai user `issboard` dengan `agent.env` yang sama |
+
+Keputusan yang mengikat:
+
+- **Nilai rahasia tidak pernah kembali ke browser.** Helper hanya melaporkan
+  "terisi" + empat karakter terakhir. Kolom rahasia yang kosong = tidak diubah;
+  menghapus harus dicentang.
+- **Log audit helper tidak mencatat nilainya** — hanya nama kunci. Journal
+  dibaca grup `adm`; token yang tercatat di sana sama dengan token yang bocor.
+  Ditemukan saat menulis fitur ini: log audit semula mencetak seluruh `props`.
+- **Nilai divalidasi dengan himpunan karakter sempit**, bukan "tidak kosong":
+  ia ditulis ke berkas `KUNCI=NILAI` yang dibaca systemd, dan baris baru di
+  dalam nilai akan menyelundupkan variabel lingkungan apa pun (`LD_PRELOAD`)
+  ke proses agent. Dikunci test.
+- **`issboard.yaml` tidak disunting.** Ia conffile paket; sekali disunting
+  mesin, tiap upgrade yang mengubah contoh bawaannya berhenti dan bertanya.
+  Timpaan `settings.conf` dibaca sesudahnya, dan halaman menampilkan asal tiap
+  nilai (bawaan / `issboard.yaml` / halaman ini) beserta tombol "kembalikan".
+- **Kunci jalur berkas tidak bisa diatur dari browser** (`history_file`,
+  `docker_socket`, `auth_file`, …): mengarahkannya ke tempat lain adalah cara
+  memindahkan apa yang dibaca atau ditulis proses berhak lebih.
+- **Tes kirim lewat `systemd-run`**, bukan dari helper langsung: helper tidak
+  punya jaringan (dan anaknya mewarisi itu), dan tes di lingkungan lain dari
+  timernya tidak membuktikan apa pun tentang timernya. Tes tidak menandai
+  temuan apa pun sebagai sudah dikabari.
+- Dashboard memuat ulang config sesudah pengaturan aplikasi disimpan, jadi
+  saringan pool dan `snapshot_exempt` berlaku di permintaan berikutnya.
+
 ### Belum dikerjakan, dengan sengaja
 
 - `zfs destroy` **dataset**, `zfs rollback`, `zpool destroy` — alasan di

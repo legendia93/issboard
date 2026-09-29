@@ -57,6 +57,7 @@
     <a href="#arc" data-sec="arc">memori arc</a>
     <a href="#sanoid" data-sec="sanoid">sanoid</a>
     <a href="#jadwal" data-sec="jadwal">jadwal</a>
+    <a href="#pengaturan" data-sec="pengaturan">pengaturan</a>
     <a href="#riwayat" data-sec="riwayat">riwayat aksi</a>
   </nav>
 
@@ -178,6 +179,78 @@
         <p class="note">Timer systemd, cron, dan smartd yang menyangkut penyimpanan — dijejerkan, karena Debian menjadwalkan scrub lewat cron, bukan timer.</p>
       </header>
       <div id="m-schedule"></div>
+    </section>
+
+    <section id="sec-pengaturan" class="sec" data-sec="pengaturan" hidden>
+      <header class="sec-head">
+        <h2 class="sec-title">Pengaturan</h2>
+        <p class="note">Kredensial notifikasi disimpan di /etc/issboard/agent.env (0600, root) dan tidak pernah dikirim
+          balik ke browser — yang terlihat hanya empat karakter terakhirnya. Pengaturan aplikasi ditulis ke
+          /etc/issboard/settings.conf, yang menimpa /etc/issboard.yaml tanpa menyuntingnya.</p>
+      </header>
+      <p id="set-note" class="note warn" hidden></p>
+      <div class="grid2">
+        <form id="notify-form" class="n-card mform" autocomplete="off">
+          <h3 class="n-label">notifikasi</h3>
+          <div id="notify-status" class="mbtns"></div>
+
+          <h4 class="n-label sub-head">telegram</h4>
+          <label class="field"><span class="n-label">token bot</span>
+            <input id="nf-ISSBOARD_TELEGRAM_TOKEN" data-secret="1" type="password" autocomplete="new-password" spellcheck="false"></label>
+          <label class="check"><input id="nfdel-ISSBOARD_TELEGRAM_TOKEN" type="checkbox"> hapus token</label>
+          <label class="field"><span class="n-label">chat id</span>
+            <input id="nf-ISSBOARD_TELEGRAM_CHAT_ID" inputmode="numeric" placeholder="-1001234567890" spellcheck="false"></label>
+
+          <h4 class="n-label sub-head">ntfy</h4>
+          <label class="field"><span class="n-label">server (kosong = ntfy.sh)</span>
+            <input id="nf-ISSBOARD_NTFY_URL" type="url" placeholder="https://ntfy.sh" spellcheck="false"></label>
+          <label class="field"><span class="n-label">topik</span>
+            <input id="nf-ISSBOARD_NTFY_TOPIC" data-secret="1" type="password" autocomplete="new-password" spellcheck="false"></label>
+          <label class="check"><input id="nfdel-ISSBOARD_NTFY_TOPIC" type="checkbox"> hapus topik</label>
+          <label class="field"><span class="n-label">token (opsional)</span>
+            <input id="nf-ISSBOARD_NTFY_TOKEN" data-secret="1" type="password" autocomplete="new-password" spellcheck="false"></label>
+          <label class="check"><input id="nfdel-ISSBOARD_NTFY_TOKEN" type="checkbox"> hapus token ntfy</label>
+
+          <p class="note">Kolom rahasia yang dibiarkan kosong tidak diubah. Perubahan berlaku di putaran agent berikutnya (≤1 menit).</p>
+          <div class="mbtns">
+            <button class="n-btn n-btn-sm" type="submit">simpan notifikasi</button>
+            <button id="notify-test" class="n-btn n-btn-sm" type="button">kirim tes</button>
+          </div>
+        </form>
+
+        <form id="app-form" class="n-card mform">
+          <h3 class="n-label">aplikasi</h3>
+          <label class="field"><span class="n-label">kirim notifikasi untuk</span>
+            <select id="as-notify_min_level">
+              <option value="warn">semua temuan (perhatian + kritis)</option>
+              <option value="crit">hanya yang kritis</option>
+            </select></label>
+          <p class="note src" data-src="notify_min_level"></p>
+          <label class="field"><span class="n-label">ingatkan lagi temuan yang masih ada setiap</span>
+            <select id="as-alert_repeat">
+              <option value="1h0m0s">1 jam</option><option value="6h0m0s">6 jam</option>
+              <option value="12h0m0s">12 jam</option><option value="24h0m0s">24 jam</option>
+              <option value="48h0m0s">2 hari</option><option value="168h0m0s">7 hari</option>
+            </select></label>
+          <p class="note src" data-src="alert_repeat"></p>
+          <label class="field"><span class="n-label">dashboard berhenti sendiri setelah idle</span>
+            <select id="as-idle_timeout">
+              <option value="1m0s">1 menit</option><option value="5m0s">5 menit</option>
+              <option value="15m0s">15 menit</option><option value="30m0s">30 menit</option>
+              <option value="1h0m0s">1 jam</option>
+            </select></label>
+          <p class="note src" data-src="idle_timeout"></p>
+          <label class="field"><span class="n-label">dataset yang tidak perlu snapshot (satu per baris; pola/* ikut anak-anaknya)</span>
+            <textarea id="as-snapshot_exempt" rows="4" spellcheck="false" placeholder="pool/rekaman/*"></textarea></label>
+          <p class="note src" data-src="snapshot_exempt"></p>
+          <fieldset class="field pools-field">
+            <legend class="n-label">pool yang ditampilkan (tidak dicentang semua = semua pool)</legend>
+            <div id="as-pools" class="mbtns"></div>
+          </fieldset>
+          <p class="note src" data-src="pools"></p>
+          <div class="mbtns"><button class="n-btn n-btn-sm" type="submit">simpan pengaturan</button></div>
+        </form>
+      </div>
     </section>
 
     <section id="sec-riwayat" class="sec" data-sec="riwayat" hidden>

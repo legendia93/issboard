@@ -19,10 +19,11 @@ import (
 type fakeSys struct {
 	ran   [][]string
 	files map[string]string
+	perms map[string]os.FileMode
 }
 
 func newFake() (*fakeSys, *Executor) {
-	f := &fakeSys{files: map[string]string{
+	f := &fakeSys{perms: map[string]os.FileMode{}, files: map[string]string{
 		"/proc/meminfo":                "MemTotal:       16384000 kB\n",
 		"/proc/spl/kstat/zfs/arcstats": "size 4 100\nc_max 4 8000000000\nc_min 4 500000000\n",
 	}}
@@ -47,8 +48,12 @@ func newFake() (*fakeSys, *Executor) {
 			}
 			return nil, os.ErrNotExist
 		},
-		WriteFile: func(p string, b []byte) error { f.files[p] = string(b); return nil },
-		Remove:    func(p string) error { delete(f.files, p); return nil },
+		WriteFile: func(p string, b []byte, perm os.FileMode) error {
+			f.files[p] = string(b)
+			f.perms[p] = perm
+			return nil
+		},
+		Remove: func(p string) error { delete(f.files, p); return nil },
 	}
 	e.Now = func() time.Time { return time.Date(2026, 9, 29, 16, 20, 0, 0, time.UTC) }
 	return f, e
@@ -377,5 +382,123 @@ func TestScrubCronDebianDimatikanLewatProperti(t *testing.T) {
 	}
 	if n := strings.Join(scheduleNotes(s, true), "|"); strings.Contains(n, "scrub") {
 		t.Errorf("catatan scrub masih menyala: %q", n)
+	}
+}
+
+const tokenLama = "123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+const tokenBaru = "987654321:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+
+func envFake() (*fakeSys, *Executor) {
+	f, e := newFake()
+	e.AgentEnv = "/etc/issboard/agent.env"
+	e.SettingsFile = "/etc/issboard/settings.conf"
+	e.AgentBin = "/usr/bin/issboard-agent"
+	f.files[e.AgentEnv] = "# kredensial\n#ISSBOARD_NTFY_TOPIC=contoh\nISSBOARD_TELEGRAM_TOKEN=" + tokenLama +
+		"\nISSBOARD_TELEGRAM_CHAT_ID=-1000000000001\nLAIN=biarkan\n"
+	return f, e
+}
+
+func TestNotifySetHanyaKunciYangDiminta(t *testing.T) {
+	f, e := envFake()
+	r := e.Handle(context.Background(), Request{Action: NotifySet, Props: map[string]string{
+		"ISSBOARD_TELEGRAM_TOKEN":   tokenBaru,
+		"ISSBOARD_TELEGRAM_CHAT_ID": "",
+		"ISSBOARD_NTFY_URL":         "https://ntfy.example.org",
+	}})
+	if !r.OK {
+		t.Fatal(r.Error)
+	}
+	got := f.files[e.AgentEnv]
+	for _, want := range []string{"# kredensial\n", "#ISSBOARD_NTFY_TOPIC=contoh\n", "ISSBOARD_TELEGRAM_TOKEN=" + tokenBaru + "\n",
+		"LAIN=biarkan\n", "ISSBOARD_NTFY_URL=https://ntfy.example.org\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("hilang %q dari:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, tokenLama) || strings.Contains(got, "CHAT_ID") {
+		t.Errorf("nilai lama/terhapus masih ada:\n%s", got)
+	}
+	if f.perms[e.AgentEnv] != 0o600 {
+		t.Errorf("mode %o, harus 0600", f.perms[e.AgentEnv])
+	}
+}
+
+// Baris baru di nilai = variabel lingkungan selundupan untuk proses agent.
+func TestNotifySetMenolakNilaiSelundupan(t *testing.T) {
+	f, e := envFake()
+	before := f.files[e.AgentEnv]
+	for _, props := range []map[string]string{
+		{"ISSBOARD_TELEGRAM_CHAT_ID": "-100\nLD_PRELOAD=/tmp/x.so"},
+		{"ISSBOARD_TELEGRAM_TOKEN": "bukan token"},
+		{"ISSBOARD_NTFY_URL": "file:///etc/shadow"},
+		{"ISSBOARD_NTFY_URL": "https://a.b/ x"},
+		{"PATH": "/tmp"},
+	} {
+		if r := e.Handle(context.Background(), Request{Action: NotifySet, Props: props}); r.OK {
+			t.Errorf("%v diterima", props)
+		}
+	}
+	if f.files[e.AgentEnv] != before {
+		t.Error("berkas berubah walau semua permintaan ditolak")
+	}
+}
+
+func TestNotifyStatusTidakMembawaRahasia(t *testing.T) {
+	_, e := envFake()
+	r := e.Handle(context.Background(), Request{Action: NotifyStatus})
+	if !r.OK {
+		t.Fatal(r.Error)
+	}
+	if strings.Contains(r.Output, "AAAAAAAAAAAA") {
+		t.Fatalf("token bocor ke jawaban: %s", r.Output)
+	}
+	var st map[string]NotifyValue
+	json.Unmarshal([]byte(r.Output), &st)
+	if tk := st["ISSBOARD_TELEGRAM_TOKEN"]; !tk.Set || tk.Hint != "••••AAAA" || tk.Value != "" {
+		t.Errorf("token: %+v", tk)
+	}
+	if ci := st["ISSBOARD_TELEGRAM_CHAT_ID"]; ci.Value != "-1000000000001" {
+		t.Errorf("chat id bukan rahasia dan harus terlihat: %+v", ci)
+	}
+	if st["ISSBOARD_NTFY_TOPIC"].Set {
+		t.Error("baris berkomentar terbaca sebagai terisi")
+	}
+}
+
+func TestNotifyTestLewatSystemdRunSebagaiIssboard(t *testing.T) {
+	f, e := envFake()
+	e.Handle(context.Background(), Request{Action: NotifyTest})
+	cmd := f.last()
+	for _, want := range []string{"systemd-run --wait --pipe", "User=issboard", "EnvironmentFile=-/etc/issboard/agent.env", "/usr/bin/issboard-agent -config /etc/issboard.yaml -test"} {
+		if !strings.Contains(cmd, want) {
+			t.Errorf("perintah tidak memuat %q: %s", want, cmd)
+		}
+	}
+}
+
+func TestSettingsSet(t *testing.T) {
+	f, e := envFake()
+	f.files[e.SettingsFile] = "alert_repeat: 12h\nidle_timeout: 10m\n"
+	r := e.Handle(context.Background(), Request{Action: SettingsSet, Props: map[string]string{
+		"alert_repeat": "6h", "idle_timeout": "", "snapshot_exempt": " kolam/rekaman/* ,, kolam/scratch ",
+	}})
+	if !r.OK {
+		t.Fatal(r.Error)
+	}
+	got := f.files[e.SettingsFile]
+	if !strings.Contains(got, "alert_repeat: 6h\n") || strings.Contains(got, "idle_timeout") ||
+		!strings.Contains(got, "snapshot_exempt: kolam/rekaman/*, kolam/scratch\n") {
+		t.Errorf("isi:\n%s", got)
+	}
+	for _, props := range []map[string]string{
+		{"history_file": "/tmp/x"},
+		{"alert_repeat": "1s"},
+		{"notify_min_level": "semua"},
+		{"snapshot_exempt": "../etc"},
+		{"pools": "a\nhistory_file: /tmp"},
+	} {
+		if r := e.Handle(context.Background(), Request{Action: SettingsSet, Props: props}); r.OK {
+			t.Errorf("%v diterima", props)
+		}
 	}
 }

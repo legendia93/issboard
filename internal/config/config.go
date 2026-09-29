@@ -81,6 +81,15 @@ type Config struct {
 	TelegramToken  string
 	TelegramChatID string
 
+	// SettingsPath: berkas timpaan halaman kelola. Kosong = SettingsFile.
+	SettingsPath string
+
+	// Sources: dari berkas mana tiap kunci terakhir diambil. Kunci yang tidak
+	// ada di sini memakai bawaan. Dipakai halaman kelola untuk menjawab
+	// "nilai ini datang dari mana" — tanpa itu, mengubah pengaturan yang
+	// ternyata ditimpa berkas lain terlihat seperti tombol yang rusak.
+	Sources map[string]string
+
 	// Demo menyajikan data palsu dan TIDAK menyentuh sistem sama sekali:
 	// tidak ada zpool, tidak ada socket Docker, tidak ada cache SMART dibaca.
 	// Dipakai untuk menggarap tampilan kondisi sakit, dan supaya screenshot
@@ -111,17 +120,44 @@ func Default() Config {
 	}
 }
 
-// Load membaca file konfigurasi. File yang tidak ada bukan error: default
-// dipakai apa adanya, supaya issboard tetap hidup justru saat sistem kacau.
+// SettingsFile adalah berkas timpaan yang ditulis halaman kelola (lewat
+// issboard-helper). Dibaca SESUDAH berkas config utama, jadi nilainya menang.
+//
+// Kenapa berkas terpisah, bukan menyunting /etc/issboard.yaml: berkas itu
+// conffile paket. Begitu disunting mesin, setiap upgrade yang mengubah contoh
+// bawaannya akan berhenti dan bertanya — di tengah `apt upgrade` yang tidak
+// ditunggui. Berkas timpaan milik issboard sendiri tidak pernah dikirim paket,
+// jadi tidak pernah ditanyakan.
+const SettingsFile = "/etc/issboard/settings.conf"
+
+// Load membaca file konfigurasi, lalu berkas timpaan halaman kelola, lalu
+// variabel lingkungan — dalam urutan itu, yang terakhir menang. File yang
+// tidak ada bukan error: default dipakai apa adanya, supaya issboard tetap
+// hidup justru saat sistem kacau.
 func Load(path string) (Config, error) {
 	c := Default()
+	c.Sources = map[string]string{}
+	if err := c.readFile(path); err != nil {
+		return c, err
+	}
+	settings := c.SettingsPath
+	if settings == "" {
+		settings = SettingsFile
+	}
+	if err := c.readFile(settings); err != nil {
+		return c, err
+	}
+	c.applyEnv()
+	return c, nil
+}
+
+func (c *Config) readFile(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			c.applyEnv()
-			return c, nil
+			return nil
 		}
-		return c, err
+		return err
 	}
 	defer f.Close()
 
@@ -136,59 +172,65 @@ func Load(path string) (Config, error) {
 			continue
 		}
 		key = strings.TrimSpace(key)
-		val = strings.TrimSpace(val)
-		val = strings.Trim(val, `"'`)
-
-		switch key {
-		case "listen":
-			c.Listen = val
-		case "idle_timeout":
-			if d, err := time.ParseDuration(val); err == nil {
-				c.IdleTimeout = d
-			}
-		case "smart_cache":
-			c.SmartCache = val
-		case "docker_socket":
-			c.DockerSocket = val
-		case "snapshot_policy":
-			c.SnapPolicyFile = val
-		case "snapshot_exempt":
-			c.SnapExempt = splitList(val)
-		case "auth_file":
-			c.AuthFile = val
-		case "helper_socket":
-			c.HelperSocket = val
-		case "demo":
-			c.Demo = val == "true" || val == "yes" || val == "1"
-		case "history_file":
-			c.HistoryFile = val
-		case "alert_state":
-			c.AlertState = val
-		case "alert_repeat":
-			if d, err := time.ParseDuration(val); err == nil {
-				c.AlertRepeat = d
-			}
-		case "notify_min_level":
-			c.NotifyMinLevel = val
-		case "ntfy_url":
-			c.NtfyURL = val
-		case "ntfy_topic":
-			c.NtfyTopic = val
-		case "ntfy_token":
-			c.NtfyToken = val
-		case "telegram_token":
-			c.TelegramToken = val
-		case "telegram_chat_id":
-			c.TelegramChatID = val
-		case "pools":
-			c.Pools = splitList(val)
+		val = strings.Trim(strings.TrimSpace(val), `"'`)
+		if c.apply(key, val) {
+			c.Sources[key] = path
 		}
 	}
-	if err := sc.Err(); err != nil {
-		return c, err
+	return sc.Err()
+}
+
+// apply memasang satu kunci. false = kunci tidak dikenal.
+func (c *Config) apply(key, val string) bool {
+	switch key {
+	case "listen":
+		c.Listen = val
+	case "idle_timeout":
+		if d, err := time.ParseDuration(val); err == nil {
+			c.IdleTimeout = d
+		}
+	case "smart_cache":
+		c.SmartCache = val
+	case "docker_socket":
+		c.DockerSocket = val
+	case "snapshot_policy":
+		c.SnapPolicyFile = val
+	case "snapshot_exempt":
+		c.SnapExempt = splitList(val)
+	case "auth_file":
+		c.AuthFile = val
+	case "helper_socket":
+		c.HelperSocket = val
+	case "demo":
+		c.Demo = val == "true" || val == "yes" || val == "1"
+	case "history_file":
+		c.HistoryFile = val
+	case "alert_state":
+		c.AlertState = val
+	case "alert_repeat":
+		if d, err := time.ParseDuration(val); err == nil {
+			c.AlertRepeat = d
+		}
+	case "notify_min_level":
+		c.NotifyMinLevel = val
+	case "ntfy_url":
+		c.NtfyURL = val
+	case "ntfy_topic":
+		c.NtfyTopic = val
+	case "ntfy_token":
+		c.NtfyToken = val
+	case "telegram_token":
+		c.TelegramToken = val
+	case "telegram_chat_id":
+		c.TelegramChatID = val
+	case "pools":
+		c.Pools = splitList(val)
+	case "settings_file":
+		c.SettingsPath = val
+	default:
+		return false
 	}
-	c.applyEnv()
-	return c, nil
+	return true
 }
 
 func splitList(val string) []string {

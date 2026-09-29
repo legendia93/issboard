@@ -16,6 +16,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/legendia93/issboard/internal/ops"
@@ -43,7 +44,7 @@ func main() {
 		// Dicatat SEBELUM dijalankan, bukan cuma sesudah: kalau prosesnya
 		// terbunuh di tengah jalan, jejak bahwa aksinya diminta tetap ada.
 		log.Printf("audit: mulai aksi=%s target=%q name=%q prop=%q=%q props=%v value=%d persist=%t rekursif=%t oleh=%q",
-			req.Action, req.Target, req.Name, req.Prop, req.PropValue, req.Props,
+			req.Action, req.Target, req.Name, req.Prop, req.PropValue, auditProps(req),
 			req.Value, req.Persist, req.Recursive, req.Actor)
 		resp = ops.NewExecutor().Handle(ctx, req)
 		cancel()
@@ -56,4 +57,22 @@ func main() {
 
 	b, _ := json.Marshal(resp)
 	_, _ = os.Stdout.Write(append(b, '\n'))
+}
+
+// auditProps: nilai pengaturan notifikasi adalah token. Journal boleh dibaca
+// grup adm, dan token yang tercatat di sana sama dengan token yang bocor —
+// jadi untuk notify.set yang dicatat hanya NAMA kunci dan apakah ia dihapus.
+func auditProps(req ops.Request) any {
+	if req.Action != ops.NotifySet {
+		return req.Props
+	}
+	var ks []string
+	for k, v := range req.Props {
+		if v == "" {
+			k += "(hapus)"
+		}
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	return ks
 }
