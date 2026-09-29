@@ -208,18 +208,27 @@ Kalau salah satunya tetap diinginkan, syarat minimal di atas (ketik ulang nama,
 tampilkan yang akan hilang, audit sebelum jalan) sudah punya semua bahannya:
 `mutate`, dialog ketik-nama, dan daftar-putih helper.
 
-### Belum terbukti
+### Terbukti di host sungguhan (29 September 2026)
 
-Semua di atas diuji dengan test dan mode demo, **belum** di host sungguhan.
-Yang paling mungkin mengejutkan saat dipasang:
+- aksi container (start) lewat socket Docker
+- penolakan "simpan permanen" ARC saat `zfs_arc_max` sudah diatur berkas lain,
+  tercatat di audit issboard dan helper
+- `systemctl list-timers --output=json` dari dalam `issboard.service` yang
+  dikeraskan
+- catatan scrub ganda — benar menyala, lalu padam setelah
+  `org.debian:periodic-scrub=disable` dipasang di tiap pool
+- helper membaca `agent.env` tanpa nilai rahasia masuk journal
+- **kirim tes** lewat `systemd-run` sebagai `issboard`: pesan uji sampai di grup
+- alamat pengunjung asli lewat cloudflared (bukan 127.0.0.1)
+
+### Belum terbukti
 
 - `zfs create -u` + `systemd-run zfs mount` — apakah dataset baru benar-benar
   terlihat ter-mount di host
-- pengerasan `issboard-helper@.service` terhadap `zpool`/`smartctl` sungguhan
+- scrub dan SMART self-test lewat helper yang dikeraskan
   (`ProtectKernelModules`, `RestrictAddressFamilies`, `MemoryDenyWriteExecute`)
-- `systemctl list-timers --output=json` dari dalam `issboard.service` yang
-  dikeraskan — butuh D-Bus sistem
 - `zpool scrub -p` di pool yang tidak sedang di-scrub
+- menulis kunci baru ke `agent.env` dan `settings.conf` dari halaman kelola
 
 ## Ini mengubah desain, bukan menambah fitur
 
