@@ -55,6 +55,9 @@ type SnapPolicy struct {
 type SnapPolicySet struct {
 	Source  string `json:"source,omitempty"`
 	Present bool   `json:"present"`
+	// Templates: nama template yang tersedia, untuk potongan config yang
+	// ditawarkan panel kelola bagi dataset yang belum tercakup.
+	Templates []string `json:"templates,omitempty"`
 
 	sections  []snapSection
 	templates map[string]map[string]string
@@ -104,6 +107,7 @@ func parseSnapPolicy(src string) SnapPolicySet {
 			cur = map[string]string{}
 			if t, ok := strings.CutPrefix(name, "template_"); ok {
 				p.templates[t] = cur
+				p.Templates = append(p.Templates, t)
 			} else {
 				p.sections = append(p.sections, snapSection{name: name, vals: cur})
 			}

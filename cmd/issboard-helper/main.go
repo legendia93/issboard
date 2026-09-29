@@ -42,8 +42,9 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
 		// Dicatat SEBELUM dijalankan, bukan cuma sesudah: kalau prosesnya
 		// terbunuh di tengah jalan, jejak bahwa aksinya diminta tetap ada.
-		log.Printf("audit: mulai aksi=%s target=%q value=%d persist=%t oleh=%q",
-			req.Action, req.Target, req.Value, req.Persist, req.Actor)
+		log.Printf("audit: mulai aksi=%s target=%q name=%q prop=%q=%q props=%v value=%d persist=%t rekursif=%t oleh=%q",
+			req.Action, req.Target, req.Name, req.Prop, req.PropValue, req.Props,
+			req.Value, req.Persist, req.Recursive, req.Actor)
 		resp = ops.NewExecutor().Handle(ctx, req)
 		cancel()
 		hasil := "ok"

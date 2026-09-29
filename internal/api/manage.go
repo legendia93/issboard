@@ -169,3 +169,188 @@ func (s *Server) handleManage(w http.ResponseWriter, r *http.Request) {
 		Helper:   err == nil && st.Mode()&os.ModeSocket != 0,
 	})
 }
+
+// ---------- dataset & snapshot (fase 8 bagian 2) ----------
+
+// knownDataset: daftar-putih dari zfs sendiri, dan tunduk pada saringan
+// `pools:` — dataset di pool yang tidak ditampilkan juga tidak bisa disentuh.
+func (s *Server) knownDataset(r *http.Request, name string) error {
+	var names []string
+	if s.cfg.Demo {
+		for _, d := range collector.DemoSnapshot().Datasets {
+			names = append(names, d.Name)
+		}
+	} else {
+		var err error
+		if names, err = ops.DatasetNames(r.Context()); err != nil {
+			return err
+		}
+	}
+	found := false
+	for _, n := range names {
+		found = found || n == name
+	}
+	if !found {
+		return bad("dataset %q tidak ada", name)
+	}
+	if len(s.cfg.Pools) > 0 {
+		pool, _, _ := strings.Cut(name, "/")
+		ok := false
+		for _, p := range s.cfg.Pools {
+			ok = ok || p == pool
+		}
+		if !ok {
+			return bad("pool %q tidak ditampilkan (pools: di config)", pool)
+		}
+	}
+	return nil
+}
+
+type datasetResponse struct {
+	Name      string         `json:"name"`
+	Props     []ops.Prop     `json:"props"`
+	Specs     []ops.PropSpec `json:"specs"`
+	Snapshots []ops.Snapshot `json:"snapshots"`
+	Errors    []string       `json:"errors,omitempty"`
+}
+
+// handleDataset (GET, baca saja): properti yang bisa diubah dan snapshot satu
+// dataset. Dipisah dari /status karena mahal di dataset dengan ribuan
+// snapshot, dan hanya dibutuhkan saat panel kelola dibuka.
+func (s *Server) handleDataset(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	if err := s.knownDataset(r, name); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	resp := datasetResponse{Name: name, Specs: ops.PropSpecs()}
+	if s.cfg.Demo {
+		resp.Props, resp.Snapshots = ops.DemoProps(), ops.DemoSnapshots(name)
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	var err error
+	if resp.Props, err = ops.GetProps(r.Context(), name); err != nil {
+		resp.Errors = append(resp.Errors, err.Error())
+	}
+	if resp.Snapshots, err = ops.ListSnapshots(r.Context(), name); err != nil {
+		resp.Errors = append(resp.Errors, err.Error())
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func decode(r *http.Request, v any) error {
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		return bad("permintaan tidak terbaca")
+	}
+	return nil
+}
+
+func (s *Server) actSnapCreate(r *http.Request, actor string) (string, error) {
+	var b struct {
+		Dataset   string `json:"dataset"`
+		Tag       string `json:"tag"`
+		Recursive bool   `json:"recursive"`
+	}
+	if err := decode(r, &b); err != nil {
+		return "", err
+	}
+	if err := s.knownDataset(r, b.Dataset); err != nil {
+		return "", err
+	}
+	if err := ops.ValidTag(b.Tag); err != nil {
+		return "", bad("%v", err)
+	}
+	if s.cfg.Demo {
+		return demoOut(ops.SnapCreate, b.Dataset), nil
+	}
+	return s.helper(r, ops.Request{Action: ops.SnapCreate, Target: b.Dataset, Name: b.Tag, Recursive: b.Recursive, Actor: actor})
+}
+
+func (s *Server) actSnapDestroy(r *http.Request, actor string) (string, error) {
+	var b struct {
+		Snapshot string `json:"snapshot"`
+	}
+	if err := decode(r, &b); err != nil {
+		return "", err
+	}
+	ds, _, ok := strings.Cut(b.Snapshot, "@")
+	if !ok {
+		return "", bad("%q bukan nama snapshot", b.Snapshot)
+	}
+	if err := s.knownDataset(r, ds); err != nil {
+		return "", err
+	}
+	if s.cfg.Demo {
+		return demoOut(ops.SnapDestroy, b.Snapshot), nil
+	}
+	snaps, err := ops.ListSnapshots(r.Context(), ds)
+	if err != nil {
+		return "", err
+	}
+	found := false
+	for _, sn := range snaps {
+		found = found || sn.Name == b.Snapshot
+	}
+	if !found {
+		return "", bad("snapshot %q tidak ada", b.Snapshot)
+	}
+	return s.helper(r, ops.Request{Action: ops.SnapDestroy, Target: b.Snapshot, Actor: actor})
+}
+
+func (s *Server) actDSCreate(r *http.Request, actor string) (string, error) {
+	var b struct {
+		Parent string            `json:"parent"`
+		Name   string            `json:"name"`
+		Props  map[string]string `json:"props"`
+	}
+	if err := decode(r, &b); err != nil {
+		return "", err
+	}
+	if err := s.knownDataset(r, b.Parent); err != nil {
+		return "", err
+	}
+	if err := ops.ValidName(b.Name); err != nil {
+		return "", bad("%v", err)
+	}
+	for k, v := range b.Props {
+		if v == "" || v == "inherit" {
+			continue
+		}
+		if err := ops.ValidateProp(k, v); err != nil {
+			return "", bad("%v", err)
+		}
+	}
+	if s.cfg.Demo {
+		return demoOut(ops.DSCreate, b.Parent+"/"+b.Name), nil
+	}
+	return s.helper(r, ops.Request{Action: ops.DSCreate, Target: b.Parent, Name: b.Name, Props: b.Props, Actor: actor})
+}
+
+func (s *Server) actDSSet(r *http.Request, actor string) (string, error) {
+	var b struct {
+		Dataset string `json:"dataset"`
+		Prop    string `json:"prop"`
+		Value   string `json:"value"`
+	}
+	if err := decode(r, &b); err != nil {
+		return "", err
+	}
+	if err := s.knownDataset(r, b.Dataset); err != nil {
+		return "", err
+	}
+	if err := ops.ValidateProp(b.Prop, b.Value); err != nil {
+		return "", bad("%v", err)
+	}
+	if s.cfg.Demo {
+		return demoOut(ops.DSSet, b.Dataset+" "+b.Prop+"="+b.Value), nil
+	}
+	return s.helper(r, ops.Request{Action: ops.DSSet, Target: b.Dataset, Prop: b.Prop, PropValue: b.Value, Actor: actor})
+}
+
+func (s *Server) actSanoid(r *http.Request, actor string) (string, error) {
+	if s.cfg.Demo {
+		return demoOut(ops.SanoidRun, ""), nil
+	}
+	return s.helper(r, ops.Request{Action: ops.SanoidRun, Actor: actor})
+}

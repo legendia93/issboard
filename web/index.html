@@ -121,6 +121,47 @@
       </form>
     </section>
 
+    <h3 class="n-label section">dataset &amp; snapshot</h3>
+    <section class="n-card">
+      <label class="field"><span class="n-label">dataset</span>
+        <select id="ds-select"></select></label>
+      <div id="ds-detail"></div>
+
+      <form id="snap-form" class="mform">
+        <h4 class="n-label">buat snapshot</h4>
+        <label class="field"><span class="n-label">tag (opsional)</span>
+          <input id="snap-tag" maxlength="32" placeholder="sebelum-upgrade" autocapitalize="off" spellcheck="false"></label>
+        <label class="check"><input id="snap-rec" type="checkbox"> ikut semua anak dataset (-r)</label>
+        <div class="mbtns"><button class="n-btn n-btn-sm" type="submit">buat snapshot</button></div>
+      </form>
+
+      <form id="prop-form" class="mform">
+        <h4 class="n-label">ubah properti</h4>
+        <label class="field"><span class="n-label">properti</span>
+          <select id="prop-name"></select></label>
+        <label id="prop-choice-wrap" class="field"><span class="n-label">nilai</span>
+          <select id="prop-choice"></select></label>
+        <label id="prop-size-wrap" class="field" hidden><span class="n-label">ukuran (mis. 50G) atau none</span>
+          <input id="prop-size" autocapitalize="off" spellcheck="false"></label>
+        <p id="prop-help" class="note"></p>
+        <div class="mbtns"><button class="n-btn n-btn-sm" type="submit">terapkan</button></div>
+      </form>
+
+      <form id="child-form" class="mform">
+        <h4 class="n-label">buat dataset anak</h4>
+        <label class="field"><span class="n-label">nama</span>
+          <input id="child-name" maxlength="64" placeholder="nama-baru" autocapitalize="off" spellcheck="false"></label>
+        <label class="field"><span class="n-label">compression</span>
+          <select id="child-comp"><option value="">warisi induk</option></select></label>
+        <label class="field"><span class="n-label">quota (opsional)</span>
+          <input id="child-quota" placeholder="50G" autocapitalize="off" spellcheck="false"></label>
+        <div class="mbtns"><button class="n-btn n-btn-sm" type="submit">buat dataset</button></div>
+      </form>
+    </section>
+
+    <h3 class="n-label section">sanoid</h3>
+    <div id="m-sanoid"></div>
+
     <h3 class="n-label section">scrub pool</h3>
     <div id="m-pools"></div>
 

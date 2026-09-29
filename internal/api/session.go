@@ -7,13 +7,16 @@ package api
 // s.mutate, yang menolak tanpa sesi sebelum menyentuh apa pun.
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/legendia93/issboard/internal/auth"
@@ -171,6 +174,25 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 // ---------- pembungkus aksi ----------
 
+// auditTarget: nama dari path kalau ada, kalau tidak dari field JSON yang
+// menunjuk sasaran. Hanya untuk log — keputusan tetap diambil handler.
+func auditTarget(path string, body []byte) string {
+	if path != "" {
+		return path
+	}
+	var b map[string]any
+	if json.Unmarshal(body, &b) != nil {
+		return ""
+	}
+	var parts []string
+	for _, k := range []string{"device", "dataset", "parent", "name", "snapshot", "prop", "value"} {
+		if v, ok := b[k].(string); ok && v != "" {
+			parts = append(parts, k+"="+v)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 // mutate adalah SATU-SATUNYA jalan menuju aksi. Urutannya: asal → sesi →
 // CSRF → audit "mulai" → aksi → audit "hasil". Tidak ada handler aksi yang
 // didaftarkan tanpa lewat sini, dan test menguncinya.
@@ -189,10 +211,18 @@ func (s *Server) mutate(action string, h func(r *http.Request, actor string) (st
 			writeJSON(w, http.StatusForbidden, map[string]any{"ok": false, "error": "token CSRF tidak cocok — muat ulang halaman"})
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		// Badan permintaan dibaca sekali di sini supaya target yang dikirim
+		// lewat JSON (dataset, snapshot, disk) ikut tercatat di audit "mulai",
+		// lalu dipasang kembali untuk handler-nya.
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+		if err != nil {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{"ok": false, "error": "permintaan terlalu besar"})
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
 
 		ip := clientIP(r)
-		target := r.PathValue("name")
+		target := auditTarget(r.PathValue("name"), body)
 		// Dicatat SEBELUM dijalankan: kalau aksinya menggantung atau prosesnya
 		// terbunuh, jejak bahwa ia diminta — dan oleh siapa — tetap ada.
 		log.Printf("audit: mulai user=%q ip=%s aksi=%s target=%q", sess.User, ip, action, target)

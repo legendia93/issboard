@@ -22,6 +22,11 @@ var mutasi = []struct{ path, body string }{
 	{"/api/v1/smart/short", `{"device":"/dev/sda"}`},
 	{"/api/v1/smart/refresh", ""},
 	{"/api/v1/arc", `{"max_bytes":0}`},
+	{"/api/v1/snapshots", `{"dataset":"pool-cepat/app","tag":"uji"}`},
+	{"/api/v1/snapshots/destroy", `{"snapshot":"pool-cepat/app@issboard_x"}`},
+	{"/api/v1/datasets", `{"parent":"pool-cepat","name":"baru","props":{"compression":"zstd"}}`},
+	{"/api/v1/datasets/props", `{"dataset":"pool-cepat/app","prop":"atime","value":"off"}`},
+	{"/api/v1/sanoid/run", ""},
 }
 
 // Kunci terpenting fase 7: tanpa sesi harus 401, bukan 200 yang diam-diam
@@ -86,7 +91,17 @@ func TestAksiDenganSesiDemo(t *testing.T) {
 	if w := post(h, "/api/v1/containers/web/exec", "", ok); w.Code != http.StatusBadRequest {
 		t.Errorf("aksi tak dikenal: HTTP %d, harus 400", w.Code)
 	}
-	if w := post(h, "/api/v1/arc", `{"max_bytes":1}`, ok); w.Code != http.StatusBadRequest {
-		t.Errorf("ARC di luar rentang: HTTP %d, harus 400", w.Code)
+	for _, m := range []struct{ path, body string }{
+		{"/api/v1/arc", `{"max_bytes":1}`},
+		{"/api/v1/snapshots", `{"dataset":"pool-cepat/tidak-ada"}`},
+		{"/api/v1/snapshots", `{"dataset":"pool-cepat/app","tag":"-r"}`},
+		{"/api/v1/snapshots/destroy", `{"snapshot":"pool-cepat/app"}`},
+		{"/api/v1/datasets", `{"parent":"pool-cepat","name":"../x"}`},
+		{"/api/v1/datasets", `{"parent":"pool-cepat","name":"x","props":{"mountpoint":"/"}}`},
+		{"/api/v1/datasets/props", `{"dataset":"pool-cepat/app","prop":"mountpoint","value":"/"}`},
+	} {
+		if w := post(h, m.path, m.body, ok); w.Code != http.StatusBadRequest {
+			t.Errorf("%s %s: HTTP %d, harus 400", m.path, m.body, w.Code)
+		}
 	}
 }

@@ -102,7 +102,7 @@ func DemoSnapshot() Snapshot {
 		// dataset wadah yang kecil, dan dataset yang dikecualikan dengan
 		// sadar. Aturan yang cuma diuji lawan keadaan sakit tidak pernah
 		// ketahuan menyala untuk keadaan sehat.
-		SnapPolicy: SnapPolicySet{Source: "/etc/sanoid/sanoid.conf", Present: true},
+		SnapPolicy: SnapPolicySet{Source: "/etc/sanoid/sanoid.conf", Present: true, Templates: []string{"prod", "arsip"}},
 		Datasets: []Dataset{
 			// Wadah: `used` besar karena anak-anaknya, isinya sendiri nyaris
 			// nol. Tidak tercakup, dan memang TIDAK boleh jadi temuan.

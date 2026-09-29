@@ -47,6 +47,7 @@ func (s *Server) Routes(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/v1/status", s.handleStatus)
 	mux.HandleFunc("GET /api/v1/history", s.handleHistory)
 	mux.HandleFunc("GET /api/v1/manage", s.handleManage)
+	mux.HandleFunc("GET /api/v1/dataset", s.handleDataset)
 
 	mux.HandleFunc("GET /api/v1/session", s.handleSession)
 	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
@@ -58,6 +59,11 @@ func (s *Server) Routes(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/v1/pools/{name}/scrub/{op}", s.mutate("scrub", s.actScrub))
 	mux.HandleFunc("POST /api/v1/smart/{op}", s.mutate("smart", s.actSmart))
 	mux.HandleFunc("POST /api/v1/arc", s.mutate("arc", s.actARC))
+	mux.HandleFunc("POST /api/v1/snapshots", s.mutate("snapshot.create", s.actSnapCreate))
+	mux.HandleFunc("POST /api/v1/snapshots/destroy", s.mutate("snapshot.destroy", s.actSnapDestroy))
+	mux.HandleFunc("POST /api/v1/datasets", s.mutate("dataset.create", s.actDSCreate))
+	mux.HandleFunc("POST /api/v1/datasets/props", s.mutate("dataset.set", s.actDSSet))
+	mux.HandleFunc("POST /api/v1/sanoid/run", s.mutate("sanoid.run", s.actSanoid))
 	mux.Handle("/", static)
 	return s.middleware(mux)
 }

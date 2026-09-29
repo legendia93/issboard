@@ -1,7 +1,8 @@
 # Fase 8 — Panel ZFS di dashboard
 
-**Status: 🟡 bagian pertama selesai di kode (29 September 2026), belum dipasang
-di host sungguhan.** Ditulis 25 Agustus 2026 dari arahan pemilik server: side
+**Status: 🟡 bagian 1 dan 2 selesai di kode (29 September 2026), belum dipasang
+di host sungguhan. Kelas C selain hapus container dan hapus satu snapshot
+sengaja belum dikerjakan.** Ditulis 25 Agustus 2026 dari arahan pemilik server: side
 panel di frontend supaya ZFS bisa diatur dari dashboard — buat zpool, destroy,
 buat dataset, snapshot, sanoid, status scrub, quick test.
 
@@ -79,17 +80,62 @@ kalau scrub dijadwalkan **dua kali** (cron *dan* `zfs-scrub-*.timer`) atau
 **tidak sama sekali**. `e2scrub_all` milik ext4 sengaja tidak dihitung sebagai
 scrub ZFS.
 
-### Belum dikerjakan dari daftar awal
+## Bagian 2, dikerjakan hari yang sama: dataset, snapshot, sanoid
 
-- snapshot manual, buat dataset, ubah properti
-- `zpool create`, `zfs destroy`, `zpool destroy`, `zfs rollback`
-- sanoid (baca/jalankan)
+| Aksi | Kelas | Catatan |
+|---|---|---|
+| buat snapshot (opsional `-r`) | A | nama otomatis `issboard_<waktu>[_tag]` |
+| hapus **satu** snapshot | **C** | tanpa `-r`/`-R` selamanya; konfirmasi ketik nama |
+| buat dataset anak | B | `zfs create -u`, lalu mount lewat `systemd-run` |
+| ubah properti | B | daftar tertutup: compression, atime, relatime, recordsize, readonly, quota, refquota, reservation, refreservation |
+| jalankan sanoid sekarang | A | `systemctl start sanoid.service` — unit yang sama dengan timernya |
+| potongan `sanoid.conf` untuk dataset tak tercakup | baca | **tidak menulis** berkas milik sanoid |
+
+**Nama baru tidak bisa di-daftar-putih.** Tag snapshot dan nama anak dataset
+belum ada di sistem, jadi aturan 3 tidak bisa diterapkan pada keduanya. Yang
+dipakai sebagai gantinya: himpunan karakter sempit (`[A-Za-z0-9_.:-]`, diawali
+huruf/angka, tanpa `/` dan `..`), dan selalu jadi satu argumen utuh di belakang
+bagian yang **sudah** lolos daftar-putih — induk dataset, atau dataset yang
+di-snapshot. Test mengunci bahwa `-r`, `-o`, `../etc`, `a/b`, dan nilai properti
+seperti `lz4 -o x=y` tidak pernah sampai ke exec.
+
+**Awalan `issboard_`** membedakan snapshot manual dari buatan sanoid
+(`autosnap_`). sanoid tidak memangkas yang bukan miliknya, jadi snapshot manual
+**tidak pernah kedaluwarsa sendiri** — konfirmasinya menyebut itu, dan daftar
+snapshot memberi label *sanoid* / *manual* per baris.
+
+**Mount namespace.** Helper berjalan dengan `ProtectSystem=strict`, yang
+membuatkannya mount namespace sendiri. `zfs create` biasa di dalamnya akan
+me-mount dataset baru **hanya di namespace helper** — di host ia tampak tidak
+ter-mount, lalu hilang begitu helper keluar. Ditemukan saat merancang, belum
+dibuktikan di mesin nyata. Jalan keluarnya `zfs create -u` lalu
+`systemd-run --wait zfs mount`, yang berjalan di namespace host. Kalau mount-nya
+gagal, laporannya memisahkan dua fakta: dataset **sudah** dibuat, mount-nya
+belum.
+
+**Properti yang sengaja tidak ada**: `mountpoint`, `canmount`, `encryption`,
+`sharenfs`/`sharesmb`. Salah isi di sana memindahkan atau menyembunyikan data,
+bukan sekadar mengubah perilakunya.
+
+### Belum dikerjakan, dengan sengaja
+
+- `zfs destroy` **dataset**, `zfs rollback`, `zpool destroy` — alasan di
+  bagian "Aksi tidak satu kelas" di atas tetap berlaku: jarang, mudah salah,
+  tanpa undo, dan lewat SSH hanya beberapa detik.
+- `zpool create` — menyentuh disk mentah; butuh UI yang menyebut bentuk vdev
+  dengan kata. Belum ada kebutuhan nyata di mesin ini.
+
+Kalau salah satunya tetap diinginkan, syarat minimal di atas (ketik ulang nama,
+tampilkan yang akan hilang, audit sebelum jalan) sudah punya semua bahannya:
+`mutate`, dialog ketik-nama, dan daftar-putih helper.
 
 ### Belum terbukti
 
 Semua di atas diuji dengan test dan mode demo, **belum** di host sungguhan.
 Yang paling mungkin mengejutkan saat dipasang:
 
+- `zfs create -u` + `systemd-run zfs mount` — apakah dataset baru benar-benar
+  terlihat ter-mount di host
 - pengerasan `issboard-helper@.service` terhadap `zpool`/`smartctl` sungguhan
   (`ProtectKernelModules`, `RestrictAddressFamilies`, `MemoryDenyWriteExecute`)
 - `systemctl list-timers --output=json` dari dalam `issboard.service` yang
@@ -168,7 +214,7 @@ tempat lahirnya temuan "stripe, bukan mirror" yang sudah ada di dashboard ini �
       di helper (`journalctl -u 'issboard-helper@*'`).
 - [x] Side panel di FE. Tetap Nothing OS, tetap tanpa pustaka luar, tetap CSP
       `default-src 'self'`.
-- [ ] Aksi kelas A dulu: ~~snapshot manual~~ (belum), mulai/hentikan scrub ✅.
+- [x] Aksi kelas A dulu: snapshot manual, mulai/hentikan scrub.
 - [x] Status scrub yang sedang berjalan — baris `scan:` ditampilkan apa adanya,
       dan tombolnya mengikuti keadaan (mulai / jeda / lanjutkan / hentikan).
 - [x] Test: setiap endpoint bermutasi tanpa sesi → 401; nama di luar

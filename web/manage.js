@@ -141,10 +141,11 @@ function showLog(ok, text) {
 
 /* Satu jalan untuk semua aksi: konfirmasi → POST ber-CSRF → catat → segarkan. */
 async function act(key, path, body, confirmOpts) {
-  if (BUSY.has(key)) return;
-  if (confirmOpts && !(await confirmDialog(confirmOpts))) return;
+  if (BUSY.has(key)) return false;
+  if (confirmOpts && !(await confirmDialog(confirmOpts))) return false;
   BUSY.add(key);
   if (LAST) renderManage(LAST);
+  let ok = false;
   try {
     const r = await fetch(path, {
       method: 'POST',
@@ -154,13 +155,15 @@ async function act(key, path, body, confirmOpts) {
     const b = await r.json().catch(() => ({ ok: false, error: 'HTTP ' + r.status }));
     if (r.status === 401) await loadSession();
     const out = (b.output || '').trim();
-    showLog(!!b.ok, b.ok ? `${key}: ${out || 'selesai'}` : `${key}: ${b.error}${out ? ' — ' + out : ''}`);
+    ok = !!b.ok;
+    showLog(ok, ok ? `${key}: ${out || 'selesai'}` : `${key}: ${b.error}${out ? ' — ' + out : ''}`);
   } catch (e) {
     showLog(false, `${key}: ${e.message}`);
   } finally {
     BUSY.delete(key);
-    await Promise.all([tick(), loadManage()]);
+    await Promise.all([tick(), loadManage(), loadDataset()]);
   }
+  return ok;
 }
 
 // Tombol aksi. `root` = lewat helper, jadi ikut mati kalau helper tidak ada.
@@ -182,6 +185,8 @@ function actBtn(label, key, onClick, { danger, root } = {}) {
 function renderManage(d) {
   if (!panelOpen()) return;
   renderARC();
+  renderDatasets(d.datasets || []);
+  renderSanoid(d);
   renderMPools(d.pools || []);
   renderMDisks((d.smart && d.smart.disks) || []);
   renderMContainers(d.containers || []);
@@ -430,6 +435,233 @@ function renderSchedule() {
   box.append(card);
 }
 
+/* ---------- dataset & snapshot ----------
+   Detailnya (properti + snapshot) diambil saat dataset dipilih dan sesudah
+   aksi, BUKAN tiap 15 detik: dataset dengan ribuan snapshot membuat daftar itu
+   mahal, dan ia tidak berubah sendiri secepat itu. */
+let DS = null;             // isi /api/v1/dataset untuk dataset terpilih
+const SNAP_MAX = 30;
+
+function selectedDataset() { return $('ds-select').value; }
+
+async function loadDataset() {
+  const name = selectedDataset();
+  if (!name) { DS = null; return; }
+  try {
+    const r = await fetch('api/v1/dataset?name=' + encodeURIComponent(name), { cache: 'no-store' });
+    DS = await r.json();
+    if (!r.ok) DS = { name, error: DS.error || ('HTTP ' + r.status) };
+  } catch (e) {
+    DS = { name, error: e.message };
+  }
+  fillPropForm();
+  if (LAST) renderManage(LAST);
+}
+
+// Tombol di form statis ikut aturan yang sama dengan actBtn.
+function gateForm(form, key) {
+  let why = '';
+  if (!SESSION.authenticated) why = 'masuk dulu';
+  else if (MANAGE && MANAGE.helper === false) why = 'issboard-helper.socket belum aktif';
+  for (const b of form.querySelectorAll('button')) {
+    b.disabled = !!why || BUSY.has(key);
+    b.title = why;
+  }
+}
+
+function renderDatasets(ds) {
+  const sel = $('ds-select');
+  const names = ds.map((d) => d.name);
+  // Opsi hanya dibangun ulang kalau daftarnya berubah: membangun ulang tiap
+  // 15 detik akan menutup pilihan yang sedang dibuka di HP.
+  if (sel.dataset.names !== names.join('\n')) {
+    const cur = sel.value;
+    clear(sel);
+    for (const n of names) sel.append(el('option', { value: n }, n));
+    sel.dataset.names = names.join('\n');
+    if (names.includes(cur)) sel.value = cur;
+    if (sel.value !== cur || !DS) loadDataset();
+  }
+  for (const f of ['snap-form', 'prop-form', 'child-form']) gateForm($(f), f);
+
+  const box = $('ds-detail');
+  clear(box);
+  if (!ds.length) { box.append(el('p', { class: 'note' }, 'Tidak ada dataset.')); return; }
+  if (!DS || DS.name !== sel.value) { box.append(el('p', { class: 'note' }, 'memuat…')); return; }
+  if (DS.error) { box.append(el('p', { class: 'note' }, 'gagal memuat: ' + DS.error)); return; }
+  for (const e of DS.errors || []) box.append(el('p', { class: 'note' }, e));
+
+  const kv = el('dl', { class: 'kv' });
+  for (const p of DS.props || []) {
+    const warisan = p.source && p.source !== 'local';
+    kv.append(el('dt', {}, p.name), el('dd', {}, p.value,
+      warisan ? el('span', { class: 'mmeta' }, ` · ${p.source.replace('inherited from', 'warisan')}`) : null));
+  }
+  box.append(el('details', { class: 'sysinfo' }, el('summary', { class: 'n-label' }, 'properti'), kv));
+
+  const snaps = DS.snapshots || [];
+  box.append(el('h4', { class: 'n-label' }, `snapshot (${snaps.length})`));
+  if (!snaps.length) box.append(el('p', { class: 'note' }, 'Belum ada snapshot.'));
+  const rows = el('div', { class: 'mrows' });
+  for (const sn of snaps.slice(0, SNAP_MAX)) {
+    const label = sn.name.slice(sn.name.indexOf('@') + 1);
+    const sanoid = label.startsWith('autosnap_');
+    const manual = label.startsWith('issboard_');
+    const k = 'snapshot.destroy ' + sn.name;
+    rows.append(el('div', { class: 'mrow' },
+      el('div', { class: 'mname mono' }, label,
+        el('span', { class: 'n-pill' }, sanoid ? 'sanoid' : manual ? 'manual' : 'lain')),
+      el('div', { class: 'mmeta' }, `${relTime(sn.created)} · unik ${bytes(sn.used_bytes)} · merujuk ${bytes(sn.referenced_bytes)}`),
+      el('div', { class: 'mbtns' }, actBtn('hapus', k, () => act(k, 'api/v1/snapshots/destroy', { snapshot: sn.name }, {
+        title: 'Hapus snapshot',
+        text: `${sn.name} dihapus, membebaskan sekitar ${bytes(sn.used_bytes)}. Titik pulih ini hilang dan tidak ada undo. ` +
+          (sanoid ? 'Ini buatan sanoid — sanoid akan membuat yang baru sesuai jadwal, tapi yang ini tidak kembali.'
+            : 'Snapshot yang bukan buatan sanoid TIDAK dipangkas otomatis; menghapusnya memang harus manual.'),
+        typeName: label,
+        okLabel: 'hapus',
+        danger: true,
+      }), { danger: true, root: true }))));
+  }
+  box.append(rows);
+  if (snaps.length > SNAP_MAX) {
+    box.append(el('p', { class: 'note' }, `+ ${snaps.length - SNAP_MAX} snapshot lebih lama tidak ditampilkan.`));
+  }
+}
+
+function fillPropForm() {
+  const specs = (DS && DS.specs) || [];
+  const sel = $('prop-name');
+  if (!sel.options.length && specs.length) {
+    for (const sp of specs) sel.append(el('option', { value: sp.name }, sp.name));
+    const comp = specs.find((x) => x.name === 'compression');
+    for (const v of (comp ? comp.values : [])) $('child-comp').append(el('option', { value: v }, v));
+  }
+  const sp = specs.find((x) => x.name === sel.value);
+  if (!sp) return;
+  $('prop-help').textContent = sp.help;
+  $('prop-size-wrap').hidden = !sp.size;
+  $('prop-choice-wrap').hidden = !!sp.size;
+  const cur = ((DS.props || []).find((p) => p.name === sp.name) || {}).value;
+  if (sp.size) {
+    $('prop-size').value = cur || '';
+  } else {
+    const ch = $('prop-choice');
+    clear(ch);
+    for (const v of [...(sp.inherit ? ['inherit'] : []), ...sp.values]) {
+      ch.append(el('option', { value: v }, v === cur ? v + ' (sekarang)' : v));
+    }
+    if (cur) ch.value = cur;
+  }
+}
+
+function submitSnap(ev) {
+  ev.preventDefault();
+  const ds = selectedDataset();
+  const tag = $('snap-tag').value.trim();
+  const rec = $('snap-rec').checked;
+  act('snap-form', 'api/v1/snapshots', { dataset: ds, tag, recursive: rec }, {
+    title: `Snapshot ${ds}`,
+    text: `Membuat snapshot ${ds}${rec ? ' beserta semua anaknya' : ''}. Awalnya tidak memakan ruang; ` +
+      'ruangnya tumbuh seiring data berubah. Snapshot manual TIDAK dipangkas sanoid — hapus sendiri kalau sudah tidak perlu.',
+    okLabel: 'buat',
+  }).then((ok) => { if (ok) $('snap-tag').value = ''; });
+}
+
+function submitProp(ev) {
+  ev.preventDefault();
+  const ds = selectedDataset();
+  const prop = $('prop-name').value;
+  const sp = DS && DS.specs && DS.specs.find((x) => x.name === prop);
+  if (!sp) return;
+  const value = sp.size ? $('prop-size').value.trim() : $('prop-choice').value;
+  act('prop-form', 'api/v1/datasets/props', { dataset: ds, prop, value }, {
+    title: `Ubah ${prop}`,
+    text: `${ds}: ${prop} = ${value}. ${sp.help}.` +
+      (prop.includes('quota') && value !== 'none' ? ' Kalau batasnya di bawah pemakaian sekarang, tulisan baru akan GAGAL.' : '') +
+      (prop === 'readonly' && value === 'on' ? ' Container yang menulis ke dataset ini akan mulai error.' : ''),
+    okLabel: 'terapkan',
+  });
+}
+
+function submitChild(ev) {
+  ev.preventDefault();
+  const parent = selectedDataset();
+  const name = $('child-name').value.trim();
+  const props = {};
+  if ($('child-comp').value) props.compression = $('child-comp').value;
+  if ($('child-quota').value.trim()) props.quota = $('child-quota').value.trim();
+  act('child-form', 'api/v1/datasets', { parent, name, props }, {
+    title: 'Buat dataset',
+    text: `Membuat ${parent}/${name}` +
+      (Object.keys(props).length ? ` (${Object.entries(props).map(([k, v]) => k + '=' + v).join(', ')})` : '') +
+      '. Dataset baru TIDAK otomatis masuk kebijakan snapshot — lihat bagian sanoid di bawah sesudahnya.',
+    okLabel: 'buat',
+  }).then((ok) => { if (ok) { $('child-name').value = ''; $('child-quota').value = ''; } });
+}
+
+/* ---------- sanoid ----------
+   issboard tidak menulis sanoid.conf — berkas milik program lain. Yang
+   ditawarkan adalah potongan yang siap ditempel untuk dataset yang oleh server
+   dinilai tidak tercakup (temuan snap.uncovered.*), jadi keputusannya tetap
+   dari internal/health, bukan aturan kedua di sini. */
+function renderSanoid(d) {
+  const box = $('m-sanoid');
+  clear(box);
+  const pol = d.snap_policy || {};
+  const timer = ((MANAGE && MANAGE.schedule && MANAGE.schedule.timers) || []).find((t) => t.unit.startsWith('sanoid'));
+
+  const card = el('div', { class: 'n-card' });
+  card.append(el('p', { class: 'note' }, pol.present
+    ? `Kebijakan dibaca dari ${pol.source}` + (pol.templates && pol.templates.length ? ` · template: ${pol.templates.join(', ')}` : '')
+    : 'Tidak ada berkas kebijakan sanoid — perbandingan cakupan mati.'));
+  if (timer) {
+    card.append(el('p', { class: 'mmeta' },
+      `${timer.unit}: terakhir ${timer.last ? relTime(timer.last) : 'belum pernah'} · berikut ${timer.next ? relWhen(timer.next) : '—'}`));
+  }
+  card.append(el('div', { class: 'mbtns mtop' }, actBtn('jalankan sanoid sekarang', 'sanoid.run',
+    () => act('sanoid.run', 'api/v1/sanoid/run', null, {
+      title: 'Jalankan sanoid',
+      text: 'Menyalakan sanoid.service sekarang — persis yang dijalankan timernya: membuat snapshot yang jatuh tempo ' +
+        'dan memangkas yang kedaluwarsa menurut sanoid.conf.',
+      okLabel: 'jalankan',
+    }), { root: true })));
+
+  const uncovered = (d.findings || []).filter((f) => (f.key || '').startsWith('snap.uncovered.')).map((f) => f.subject);
+  if (pol.present && uncovered.length) {
+    const tpl = (pol.templates && pol.templates[0]) || 'ISI_TEMPLATE';
+    const text = uncovered.map((n) => `[${n}]\n\tuse_template = ${tpl}\n`).join('\n');
+    const pre = el('pre', { class: 'snippet' }, text);
+    const copy = el('button', { class: 'n-btn n-btn-sm', type: 'button' }, 'salin');
+    copy.addEventListener('click', () => copyText(pre, copy));
+    card.append(
+      el('h4', { class: 'n-label' }, `tidak tercakup (${uncovered.length})`),
+      el('p', { class: 'note' }, `Tempel ke ${pol.source}, ganti template kalau perlu, lalu jalankan sanoid. ` +
+        'issboard sengaja tidak menulis berkas milik sanoid. Kalau memang tidak perlu snapshot, daftarkan di snapshot_exempt.'),
+      pre, el('div', { class: 'mbtns' }, copy));
+  }
+  box.append(card);
+}
+
+// Clipboard API hanya ada di secure context, dan tailnet melayani HTTP polos.
+// Cadangannya memilih teksnya, supaya cukup satu ketuk "salin" dari sistem.
+function copyText(pre, btn) {
+  const done = () => { btn.textContent = 'tersalin'; setTimeout(() => { btn.textContent = 'salin'; }, 1500); };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(pre.textContent).then(done, () => selectText(pre));
+  } else {
+    selectText(pre);
+    btn.textContent = 'teks terpilih — salin manual';
+  }
+}
+
+function selectText(node) {
+  const r = document.createRange();
+  r.selectNodeContents(node);
+  const s = window.getSelection();
+  s.removeAllRanges();
+  s.addRange(r);
+}
+
 /* ---------- buka/tutup ---------- */
 function openPanel() {
   $('panel').hidden = false;
@@ -457,6 +689,11 @@ function initManage() {
   $('logout').addEventListener('click', logout);
   $('arc-form').addEventListener('submit', (e) => submitARC(e, false));
   $('arc-default').addEventListener('click', () => submitARC(null, true));
+  $('ds-select').addEventListener('change', () => { DS = null; loadDataset(); });
+  $('prop-name').addEventListener('change', fillPropForm);
+  $('snap-form').addEventListener('submit', submitSnap);
+  $('prop-form').addEventListener('submit', submitProp);
+  $('child-form').addEventListener('submit', submitChild);
   // Jadwal jarang berubah; cukup disegarkan saat panelnya terbuka.
   setInterval(() => { if (panelOpen() && !document.hidden) loadManage(); }, 30000);
   loadSession();

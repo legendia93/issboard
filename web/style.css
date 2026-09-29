@@ -478,3 +478,21 @@ body.panel-open { overflow: hidden; }
 .confirm-text { margin: 0 0 16px; font-size: 14px; line-height: 1.5; }
 .confirm .field { margin-bottom: 16px; }
 .confirm .mbtns { justify-content: flex-end; }
+
+.field select {
+  font: inherit; font-family: var(--font-mono); font-size: 14px;
+  color: var(--n-ink); background: var(--n-surface);
+  border: 1px solid var(--n-line); border-radius: var(--n-radius-sm);
+  padding: 9px 12px; width: 100%; min-width: 0;
+}
+.mform h4.n-label { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--n-line); }
+.mname .n-pill { margin-left: auto; }
+.snippet {
+  font-family: var(--font-mono); font-size: 12px;
+  background: var(--n-surface-2); border-radius: var(--n-radius-sm);
+  padding: 10px 12px; margin: 8px 0; overflow-x: auto; white-space: pre;
+  user-select: all;
+}
+/* Nama snapshot panjang dan tanpa spasi; di ukuran judul ia terpenggal di
+   tengah kata ("hour / ly"). Lebih kecil, dan dipenggal di mana saja. */
+.mname.mono { font-size: 13px; font-weight: 500; word-break: break-all; }

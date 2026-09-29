@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeSys merekam SETIAP perintah yang dijalankan. Test di sini mengunci
@@ -31,6 +32,10 @@ func newFake() (*fakeSys, *Executor) {
 			switch {
 			case name == "zpool" && args[0] == "list":
 				return "kolam\ncadangan\n", nil
+			case name == "zfs" && args[0] == "list" && args[len(args)-1] == "filesystem,volume":
+				return "kolam\nkolam/data\n", nil
+			case name == "zfs" && args[0] == "list" && args[len(args)-1] == "snapshot":
+				return "kolam/data@lama\n", nil
 			case name == "smartctl" && args[0] == "--scan":
 				return "/dev/sda -d sat # /dev/sda [SAT], ATA device\n/dev/nvme0 -d nvme # /dev/nvme0, NVMe device\n", nil
 			}
@@ -45,7 +50,19 @@ func newFake() (*fakeSys, *Executor) {
 		WriteFile: func(p string, b []byte) error { f.files[p] = string(b); return nil },
 		Remove:    func(p string) error { delete(f.files, p); return nil },
 	}
+	e.Now = func() time.Time { return time.Date(2026, 9, 29, 16, 20, 0, 0, time.UTC) }
 	return f, e
+}
+
+// ran mencari perintah zfs yang MENGUBAH sesuatu (bukan list).
+func (f *fakeSys) mutations() []string {
+	var out []string
+	for _, c := range f.ran {
+		if (c[0] == "zfs" && c[1] != "list") || c[0] == "systemd-run" {
+			out = append(out, strings.Join(c, " "))
+		}
+	}
+	return out
 }
 
 func (f *fakeSys) last() string {
@@ -221,5 +238,117 @@ func TestE2scrubBukanScrubZFS(t *testing.T) {
 		Timers: []Timer{{Unit: "zfs-scrub-monthly@kolam.timer"}}}
 	if !strings.Contains(strings.Join(scheduleNotes(s, true), "|"), "dua kali") {
 		t.Error("scrub ganda tidak dicatat")
+	}
+}
+
+func TestSnapshotDibuatDenganNamaOtomatis(t *testing.T) {
+	f, e := newFake()
+	r := e.Handle(context.Background(), Request{Action: SnapCreate, Target: "kolam/data", Name: "sebelum-upgrade"})
+	if !r.OK {
+		t.Fatal(r.Error)
+	}
+	if got := f.mutations(); len(got) != 1 || got[0] != "zfs snapshot kolam/data@issboard_2026-09-29_16:20:00_sebelum-upgrade" {
+		t.Errorf("perintah: %v", got)
+	}
+
+	for _, req := range []Request{
+		{Action: SnapCreate, Target: "kolam/lain"},
+		{Action: SnapCreate, Target: "kolam/data", Name: "-r"},
+		{Action: SnapCreate, Target: "kolam/data", Name: "a b"},
+		{Action: SnapCreate, Target: "kolam/data", Name: "x@y"},
+		{Action: SnapCreate, Target: "kolam/data@lama"},
+	} {
+		f.ran = nil
+		if r := e.Handle(context.Background(), req); r.OK {
+			t.Errorf("%+v diterima", req)
+		}
+		if m := f.mutations(); len(m) != 0 {
+			t.Errorf("%+v sampai ke exec: %v", req, m)
+		}
+	}
+}
+
+func TestHapusSnapshotHanyaSatu(t *testing.T) {
+	f, e := newFake()
+	if r := e.Handle(context.Background(), Request{Action: SnapDestroy, Target: "kolam/data@lama"}); !r.OK {
+		t.Fatal(r.Error)
+	}
+	if got := f.mutations(); len(got) != 1 || got[0] != "zfs destroy kolam/data@lama" {
+		t.Errorf("perintah: %v", got)
+	}
+	// Dataset (tanpa @) tidak boleh pernah bisa dihapus lewat jalur ini,
+	// walaupun ada di daftar dataset.
+	for _, jahat := range []string{"kolam/data", "kolam", "kolam/data@lama -r", "kolam/data@baru", "-r kolam/data@lama"} {
+		f.ran = nil
+		if r := e.Handle(context.Background(), Request{Action: SnapDestroy, Target: jahat}); r.OK {
+			t.Errorf("%q diterima", jahat)
+		}
+		if m := f.mutations(); len(m) != 0 {
+			t.Errorf("%q sampai ke exec: %v", jahat, m)
+		}
+	}
+}
+
+func TestBuatDatasetTanpaMountDiNamespaceHelper(t *testing.T) {
+	f, e := newFake()
+	r := e.Handle(context.Background(), Request{Action: DSCreate, Target: "kolam", Name: "baru",
+		Props: map[string]string{"compression": "zstd", "atime": "inherit", "quota": "50G"}})
+	if !r.OK {
+		t.Fatal(r.Error)
+	}
+	m := f.mutations()
+	if len(m) != 2 || m[0] != "zfs create -u -o compression=zstd -o quota=50G kolam/baru" ||
+		!strings.HasSuffix(m[1], "zfs mount kolam/baru") || !strings.HasPrefix(m[1], "systemd-run --wait") {
+		t.Errorf("perintah: %v", m)
+	}
+
+	for _, req := range []Request{
+		{Action: DSCreate, Target: "kolam", Name: "data"},   // sudah ada
+		{Action: DSCreate, Target: "tidak-ada", Name: "x"},  // induk tak ada
+		{Action: DSCreate, Target: "kolam", Name: "../etc"}, // nama
+		{Action: DSCreate, Target: "kolam", Name: "-o"},     // opsi
+		{Action: DSCreate, Target: "kolam", Name: "a/b"},    // dua tingkat
+		{Action: DSCreate, Target: "kolam", Name: "x", Props: map[string]string{"mountpoint": "/etc"}},
+		{Action: DSCreate, Target: "kolam", Name: "x", Props: map[string]string{"compression": "lz4 -o x=y"}},
+	} {
+		f.ran = nil
+		if r := e.Handle(context.Background(), req); r.OK {
+			t.Errorf("%+v diterima", req)
+		}
+		if m := f.mutations(); len(m) != 0 {
+			t.Errorf("%+v sampai ke exec: %v", req, m)
+		}
+	}
+}
+
+func TestUbahProperti(t *testing.T) {
+	f, e := newFake()
+	e.Handle(context.Background(), Request{Action: DSSet, Target: "kolam/data", Prop: "quota", PropValue: "none"})
+	e.Handle(context.Background(), Request{Action: DSSet, Target: "kolam/data", Prop: "compression", PropValue: "inherit"})
+	m := f.mutations()
+	if len(m) != 2 || m[0] != "zfs set quota=none kolam/data" || m[1] != "zfs inherit compression kolam/data" {
+		t.Errorf("perintah: %v", m)
+	}
+	for _, req := range []Request{
+		{Action: DSSet, Target: "kolam/data", Prop: "mountpoint", PropValue: "/"},
+		{Action: DSSet, Target: "kolam/data", Prop: "quota", PropValue: "inherit"},
+		{Action: DSSet, Target: "kolam/data", Prop: "quota", PropValue: "10G;x"},
+		{Action: DSSet, Target: "kolam/data", Prop: "recordsize", PropValue: "3K"},
+		{Action: DSSet, Target: "kolam/x", Prop: "atime", PropValue: "off"},
+	} {
+		f.ran = nil
+		if r := e.Handle(context.Background(), req); r.OK {
+			t.Errorf("%+v diterima", req)
+		}
+		if m := f.mutations(); len(m) != 0 {
+			t.Errorf("%+v sampai ke exec: %v", req, m)
+		}
+	}
+}
+
+func TestParseSnapshotsTerbaruDulu(t *testing.T) {
+	s := parseSnapshots("k/d@a\t100\t200\t1000\nk/d@b\t5\t6\t2000\n")
+	if len(s) != 2 || s[0].Name != "k/d@b" || s[1].Used != 100 {
+		t.Errorf("%+v", s)
 	}
 }

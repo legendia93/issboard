@@ -3,7 +3,8 @@
 Dashboard kesehatan host untuk server rumahan berbasis **ZFS + Docker**:
 satu binary Go statis, frontend ikut ter-*embed*, tanpa runtime apa pun di
 server. Bisa juga **mengatur**: container (start/stop/restart/hapus), scrub
-pool, SMART self-test, dan batas cache ARC — semuanya di balik login.
+pool, SMART self-test, batas cache ARC, snapshot, dataset & propertinya, dan
+sanoid — semuanya di balik login.
 
 Yang ditampilkan: pool & dataset ZFS (termasuk **apakah pool pernah di-scrub**
 dan **apakah benar-benar redundan**), **kebijakan snapshot dibandingkan dengan
@@ -182,8 +183,10 @@ Sunting `/etc/issboard.yaml` seperlunya, lalu buka `http://127.0.0.1:9955`.
 
 Tombol **kelola** di header (atau `#kelola` di URL) membuka panel aksi:
 start/stop/restart/hapus container, scrub mulai/jeda/hentikan, SMART tes
-singkat/panjang, batas ARC, dan daftar jadwal otomatis (timer systemd, cron,
-smartd). Semua aksi **mati** sampai kata sandi operator diatur:
+singkat/panjang, batas ARC, buat/hapus snapshot, buat dataset anak, ubah
+properti dataset, jalankan sanoid (plus potongan `sanoid.conf` untuk dataset
+yang belum tercakup — issboard tidak menulis berkas itu), dan daftar jadwal
+otomatis (timer systemd, cron, smartd). Semua aksi **mati** sampai kata sandi operator diatur:
 
 ```bash
 sudo issboard -set-password              # user bawaan "admin"; -user untuk nama lain
@@ -336,6 +339,12 @@ adalah satu-satunya tempat hal itu bisa ketahuan.
 | `POST /api/v1/pools/{nama}/scrub/{start\|pause\|stop}` | scrub, lewat helper |
 | `POST /api/v1/smart/{short\|long\|abort\|refresh}` | SMART, body `{"device": "/dev/sda"}` |
 | `POST /api/v1/arc` | batas ARC, body `{"max_bytes": n, "persist": true}`; 0 = bawaan |
+| `GET /api/v1/dataset?name=` | properti yang bisa diubah + snapshot satu dataset |
+| `POST /api/v1/snapshots` | `{"dataset", "tag", "recursive"}` |
+| `POST /api/v1/snapshots/destroy` | `{"snapshot": "pool/ds@nama"}` — satu snapshot, tanpa `-r` |
+| `POST /api/v1/datasets` | `{"parent", "name", "props": {...}}` |
+| `POST /api/v1/datasets/props` | `{"dataset", "prop", "value"}`; `inherit` untuk kembali mewarisi |
+| `POST /api/v1/sanoid/run` | nyalakan `sanoid.service` |
 
 Semua `POST` aksi butuh cookie sesi **dan** header `X-CSRF-Token`; tanpa sesi
 jawabannya 401.

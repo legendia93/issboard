@@ -36,7 +36,7 @@ Ditetapkan 18 Agustus 2026:
 | 5 | [`05-pemasangan.md`](05-pemasangan.md) — pasang di mesin sungguhan | ✅ selesai |
 | 6 | [`06-kebijakan-snapshot.md`](06-kebijakan-snapshot.md) — cakupan & umur snapshot | ✅ selesai |
 | 7 | [`07-autentikasi.md`](07-autentikasi.md) — syarat sebelum endpoint bermutasi | ✅ di kode, belum dipasang |
-| 8 | [`08-panel-zfs.md`](08-panel-zfs.md) — panel kelola: container, scrub, SMART, ARC, jadwal | 🟡 bagian pertama, belum dipasang |
+| 8 | [`08-panel-zfs.md`](08-panel-zfs.md) — panel kelola: container, scrub, SMART, ARC, jadwal, dataset, snapshot, sanoid | 🟡 di kode, belum dipasang; kelas C sengaja terbatas |
 
 Enam fase pertama sudah selesai, dan issboard **sudah berjalan di host
 sungguhan** sejak 21 Agustus 2026. Fase 7 dan 8 dijadwalkan 25 Agustus 2026 dan

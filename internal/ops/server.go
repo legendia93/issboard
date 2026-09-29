@@ -6,8 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Executor mengerjakan permintaan di sisi root. Semua sentuhan ke sistem
@@ -19,6 +21,7 @@ type Executor struct {
 	Remove    func(path string) error
 	// PersistDir adalah folder modprobe.d; bisa diganti di test.
 	PersistDir string
+	Now        func() time.Time
 }
 
 // NewExecutor memakai sistem sungguhan.
@@ -36,6 +39,7 @@ func NewExecutor() *Executor {
 		WriteFile:  writeAtomic,
 		Remove:     os.Remove,
 		PersistDir: ModprobeDir,
+		Now:        time.Now,
 	}
 }
 
@@ -91,6 +95,65 @@ func (e *Executor) handle(ctx context.Context, req Request) (string, error) {
 
 	case ARCSet:
 		return e.setARC(req.Value, req.Persist)
+
+	case SnapCreate:
+		ds, err := e.dataset(ctx, req.Target)
+		if err != nil {
+			return "", err
+		}
+		if err := ValidTag(req.Name); err != nil {
+			return "", err
+		}
+		name := SnapName(ds, req.Name, e.Now())
+		args := []string{"snapshot"}
+		if req.Recursive {
+			args = append(args, "-r")
+		}
+		if _, err := e.Run(ctx, "zfs", append(args, name)...); err != nil {
+			return "", err
+		}
+		return "dibuat " + name, nil
+
+	case SnapDestroy:
+		snap, err := e.snapshot(ctx, req.Target)
+		if err != nil {
+			return "", err
+		}
+		// Tanpa -r dan tanpa -R, selamanya: satu snapshot, satu nama. Snapshot
+		// yang punya clone ditolak ZFS sendiri, dan itu memang yang diinginkan.
+		if _, err := e.Run(ctx, "zfs", "destroy", snap); err != nil {
+			return "", err
+		}
+		return "dihapus " + snap, nil
+
+	case DSCreate:
+		return e.createDataset(ctx, req)
+
+	case DSSet:
+		ds, err := e.dataset(ctx, req.Target)
+		if err != nil {
+			return "", err
+		}
+		if err := ValidateProp(req.Prop, req.PropValue); err != nil {
+			return "", err
+		}
+		if req.PropValue == "inherit" {
+			if _, err := e.Run(ctx, "zfs", "inherit", req.Prop, ds); err != nil {
+				return "", err
+			}
+			return req.Prop + " " + ds + " kembali mewarisi induknya", nil
+		}
+		if _, err := e.Run(ctx, "zfs", "set", req.Prop+"="+req.PropValue, ds); err != nil {
+			return "", err
+		}
+		return req.Prop + "=" + req.PropValue + " pada " + ds, nil
+
+	case SanoidRun:
+		// Lewat unit-nya, bukan memanggil sanoid langsung: unit itulah yang
+		// dijalankan timer, dengan config dan lingkungan yang sama. Kalau
+		// dashboard menjalankan sanoid dengan cara lain, hasil "berhasil" di
+		// sini tidak membuktikan apa pun tentang jadwal yang sesungguhnya.
+		return e.Run(ctx, "systemctl", "start", "--no-block", "sanoid.service")
 	}
 	return "", fmt.Errorf("aksi tidak dikenal: %q", req.Action)
 }
@@ -107,6 +170,86 @@ func (e *Executor) pool(ctx context.Context, want string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("pool %q tidak ada di zpool list", want)
+}
+
+// dataset mengembalikan nama filesystem/volume HANYA kalau persis ada.
+func (e *Executor) dataset(ctx context.Context, want string) (string, error) {
+	out, err := e.Run(ctx, "zfs", "list", "-H", "-o", "name", "-t", "filesystem,volume")
+	if err != nil {
+		return "", err
+	}
+	if contains(strings.Fields(out), want) {
+		return want, nil
+	}
+	return "", fmt.Errorf("dataset %q tidak ada di zfs list", want)
+}
+
+func (e *Executor) snapshot(ctx context.Context, want string) (string, error) {
+	if !strings.Contains(want, "@") {
+		return "", fmt.Errorf("%q bukan nama snapshot", want)
+	}
+	out, err := e.Run(ctx, "zfs", "list", "-H", "-o", "name", "-t", "snapshot")
+	if err != nil {
+		return "", err
+	}
+	if contains(strings.Fields(out), want) {
+		return want, nil
+	}
+	return "", fmt.Errorf("snapshot %q tidak ada di zfs list", want)
+}
+
+// createDataset membuat anak dataset TANPA me-mount-nya (-u), lalu me-mount
+// lewat systemd-run.
+//
+// 🔴 Helper berjalan di mount namespace-nya sendiri (ProtectSystem=strict
+// membuatnya). `zfs create` biasa akan me-mount dataset baru HANYA di dalam
+// namespace itu — di host ia terlihat tidak ter-mount, lalu hilang begitu
+// helper keluar. systemd-run menjalankan `zfs mount` sebagai unit sementara
+// di namespace host, tempat mount itu memang harus berada.
+func (e *Executor) createDataset(ctx context.Context, req Request) (string, error) {
+	parent, err := e.dataset(ctx, req.Target)
+	if err != nil {
+		return "", err
+	}
+	if err := ValidName(req.Name); err != nil {
+		return "", err
+	}
+	child := parent + "/" + req.Name
+	if _, err := e.dataset(ctx, child); err == nil {
+		return "", fmt.Errorf("dataset %q sudah ada", child)
+	}
+
+	args := []string{"create", "-u"}
+	keys := make([]string, 0, len(req.Props))
+	for k := range req.Props {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := req.Props[k]
+		if v == "" || v == "inherit" {
+			continue // dataset baru sudah mewarisi dengan sendirinya
+		}
+		if err := ValidateProp(k, v); err != nil {
+			return "", err
+		}
+		args = append(args, "-o", k+"="+v)
+	}
+	if _, err := e.Run(ctx, "zfs", append(args, child)...); err != nil {
+		return "", err
+	}
+
+	msg := "dibuat " + child
+	if _, err := e.Run(ctx, "systemd-run", "--wait", "--collect", "--quiet",
+		"--unit=issboard-mount-"+strconv.FormatInt(e.Now().UnixNano(), 36),
+		"zfs", "mount", child); err != nil {
+		// Datasetnya SUDAH ada; gagal mount bukan alasan untuk mengaku gagal
+		// total — orang perlu tahu dua fakta itu terpisah.
+		msg += "; ⚠ belum ter-mount: " + err.Error()
+	} else {
+		msg += " dan ter-mount"
+	}
+	return msg, nil
 }
 
 // device mengembalikan argumen smartctl untuk perangkat yang persis ada di

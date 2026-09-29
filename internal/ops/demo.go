@@ -39,3 +39,33 @@ func DemoSchedule() Schedule {
 	s.Notes = scheduleNotes(s, true)
 	return s
 }
+
+// DemoSnapshots memuat campuran buatan sanoid dan buatan tangan, supaya
+// perbedaan "ikut dipangkas otomatis atau tidak" terlihat di UI.
+func DemoSnapshots(dataset string) []Snapshot {
+	now := time.Now().Truncate(time.Minute)
+	var s []Snapshot
+	for i, d := range []time.Duration{20 * time.Minute, 80 * time.Minute, 26 * time.Hour} {
+		s = append(s, Snapshot{
+			Name: dataset + "@autosnap_" + now.Add(-d).Format("2006-01-02_15:04:05") + "_hourly",
+			Used: int64(i+1) * 37 << 20, Referenced: 20 << 30, Created: now.Add(-d),
+		})
+	}
+	s = append(s, Snapshot{Name: dataset + "@issboard_2026-08-14_10:00:00_migrasi",
+		Used: 3 << 30, Referenced: 18 << 30, Created: time.Date(2026, 8, 14, 10, 0, 0, 0, time.Local)})
+	return s
+}
+
+func DemoProps() []Prop {
+	return []Prop{
+		{"atime", "off", "inherited from pool-cepat"},
+		{"compression", "zstd", "local"},
+		{"quota", "none", "default"},
+		{"readonly", "off", "default"},
+		{"recordsize", "128K", "default"},
+		{"refquota", "none", "default"},
+		{"refreservation", "none", "default"},
+		{"relatime", "on", "default"},
+		{"reservation", "none", "default"},
+	}
+}

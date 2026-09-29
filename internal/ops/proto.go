@@ -36,6 +36,12 @@ const (
 	SmartAbort   = "smart.abort"
 	SmartRefresh = "smart.refresh"
 	ARCSet       = "arc.set"
+
+	SnapCreate  = "snap.create"
+	SnapDestroy = "snap.destroy"
+	DSCreate    = "ds.create"
+	DSSet       = "ds.set"
+	SanoidRun   = "sanoid.run"
 )
 
 type Request struct {
@@ -46,6 +52,18 @@ type Request struct {
 	Value int64 `json:"value,omitempty"`
 	// Persist: arc.set juga menulis /etc/modprobe.d supaya selamat reboot.
 	Persist bool `json:"persist,omitempty"`
+	// Name: tag snapshot (snap.create) atau nama anak dataset (ds.create).
+	// Ini satu-satunya teks BARU yang bisa masuk dari luar — nama yang belum
+	// ada tidak bisa dicocokkan dengan daftar, jadi ia diperiksa dengan
+	// himpunan karakter yang sempit (ValidName/ValidTag) dan selalu jadi satu
+	// argumen utuh di belakang nama yang sudah lolos daftar-putih.
+	Name string `json:"name,omitempty"`
+	// Recursive: snap.create ikut membuat snapshot anak-anaknya (-r).
+	Recursive bool `json:"recursive,omitempty"`
+	// Prop/PropValue: ds.set. Props: ds.create. Semuanya lewat ValidateProp.
+	Prop      string            `json:"prop,omitempty"`
+	PropValue string            `json:"prop_value,omitempty"`
+	Props     map[string]string `json:"props,omitempty"`
 	// Actor hanya untuk log audit helper. Helper tidak memakainya untuk
 	// memutuskan apa pun — yang membatasi siapa boleh bicara dengannya adalah
 	// izin socket-nya (root:issboard 0660).
