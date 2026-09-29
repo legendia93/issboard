@@ -110,7 +110,7 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Handler:           api.New(cfg, collector.NewCache(), idle.touch).Routes(http.FileServerFS(static)),
+		Handler:           api.New(cfg, collector.NewCache(), idle.touch).Routes(newAssets(static, *webDir == "")),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

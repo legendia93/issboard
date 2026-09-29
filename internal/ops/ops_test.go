@@ -352,3 +352,30 @@ func TestParseSnapshotsTerbaruDulu(t *testing.T) {
 		t.Errorf("%+v", s)
 	}
 }
+
+// Setelah pemilik mematikan scrub cron Debian dengan cara yang dianjurkan
+// Debian (properti per-pool), catatan "scrub dua kali" harus padam. Ini
+// terjadi sungguhan: catatannya tetap menyala sesudah diperbaiki.
+func TestScrubCronDebianDimatikanLewatProperti(t *testing.T) {
+	mk := func() Schedule {
+		return Schedule{
+			Cron:   []CronEntry{{Command: "if [ -x /usr/lib/zfs-linux/scrub ]; then /usr/lib/zfs-linux/scrub; fi"}},
+			Timers: []Timer{{Unit: "zfs-scrub-monthly@a.timer"}},
+		}
+	}
+
+	s := mk()
+	markDebianScrub(s.Cron, parsePoolProps("a\tdisable\nb\t-\n"))
+	if s.Cron[0].Inactive != "" || !strings.Contains(strings.Join(scheduleNotes(s, true), "|"), "dua kali") {
+		t.Error("satu pool masih di-scrub cron, tapi catatan ganda padam")
+	}
+
+	s = mk()
+	markDebianScrub(s.Cron, parsePoolProps("a\tdisable\nb\tdisable\n"))
+	if s.Cron[0].Inactive == "" {
+		t.Error("baris cron tidak ditandai tidak aktif")
+	}
+	if n := strings.Join(scheduleNotes(s, true), "|"); strings.Contains(n, "scrub") {
+		t.Errorf("catatan scrub masih menyala: %q", n)
+	}
+}

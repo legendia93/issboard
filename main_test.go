@@ -1,9 +1,13 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 // activatedFDs menentukan apakah proses ini menerima socket dari systemd.
@@ -61,5 +65,42 @@ func TestListenersTanpaActivation(t *testing.T) {
 	}
 	if len(lns) != 1 {
 		t.Fatalf("mau 1 listener, dapat %d", len(lns))
+	}
+}
+
+func TestAsetBertandaVersiIsinya(t *testing.T) {
+	fsys := fstest.MapFS{
+		"index.html": {Data: []byte(`<link rel="stylesheet" href="style.css"><script src="app.js"></script><script src="hilang.js"></script>`)},
+		"style.css":  {Data: []byte("body{}")},
+		"app.js":     {Data: []byte("1")},
+	}
+	a := newAssets(fsys, false)
+	get := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		a.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		return w
+	}
+
+	body := get("/").Body.String()
+	v1 := a.version("style.css")
+	if !strings.Contains(body, `href="style.css?v=`+v1+`"`) || !strings.Contains(body, `src="app.js?v=`) {
+		t.Fatalf("rujukan tidak bertanda versi: %s", body)
+	}
+	// Berkas yang tidak ada dibiarkan apa adanya, supaya 404-nya terlihat.
+	if !strings.Contains(body, `src="hilang.js"`) {
+		t.Errorf("rujukan ke berkas yang tidak ada ikut diubah: %s", body)
+	}
+
+	// Isi berubah → versi berubah. Inilah seluruh gunanya.
+	fsys["style.css"] = &fstest.MapFile{Data: []byte("body{color:red}")}
+	if body := get("/index.html").Body.String(); strings.Contains(body, v1) {
+		t.Error("versi tidak berubah setelah isi berkas berubah")
+	}
+
+	if cc := get("/style.css?v=" + a.version("style.css")).Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Errorf("aset bertanda versi: Cache-Control %q", cc)
+	}
+	if cc := get("/style.css").Header().Get("Cache-Control"); strings.Contains(cc, "immutable") {
+		t.Error("aset TANPA versi tidak boleh immutable")
 	}
 }

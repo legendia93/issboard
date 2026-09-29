@@ -217,3 +217,4 @@ code { font-family: var(--font-mono); font-size: 0.95em; }
 /* Di HP bilah atas sudah dua baris; stempel waktu yang paling bisa dikorbankan
    — ia ada juga di dashboard, dan tiap aksi memberi kabarnya sendiri. */
 @media (max-width: 560px) { #updated { display: none; } }
+.mrow.off .mname, .mrow.off .mmeta.mono { opacity: .5; }

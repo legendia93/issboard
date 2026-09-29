@@ -756,10 +756,12 @@ function renderSchedule() {
   if (!cron.length) cc.append(el('p', { class: 'note' }, 'Tidak ada baris cron terkait ZFS/SMART.'));
   const cr = el('div', { class: 'mrows' });
   for (const c of cron) {
-    cr.append(el('div', { class: 'mrow' },
-      el('div', { class: 'mname mono' }, c.schedule),
+    cr.append(el('div', { class: 'mrow' + (c.inactive ? ' off' : '') },
+      el('div', { class: 'mname mono' }, c.schedule,
+        c.inactive ? el('span', { class: 'n-pill' }, 'tidak aktif') : null),
       el('div', { class: 'mmeta mono' }, c.command),
-      el('div', { class: 'mmeta' }, `${c.file}${c.user ? ' · ' + c.user : ''}`)));
+      el('div', { class: 'mmeta' }, `${c.file}${c.user ? ' · ' + c.user : ''}` +
+        (c.inactive ? ` · ${c.inactive}` : ''))));
   }
   cc.append(cr);
   box.append(cc);

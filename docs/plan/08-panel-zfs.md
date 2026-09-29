@@ -139,6 +139,20 @@ Tiga hal yang tidak terlihat di mesin pengembangan:
    dibaca dari `CF-Connecting-IP`/`X-Forwarded-For`, **hanya** kalau
    koneksinya dari loopback; dari tailnet header itu bisa dipalsukan.
 
+Menyusul hari yang sama:
+
+4. **`no-cache` saja ternyata tidak cukup.** Cloudflare menimpa header dari
+   issboard dengan `max-age=14400` ("Browser Cache TTL" bawaannya), jadi browser
+   tetap menyimpan CSS 4 jam. Sekarang setiap CSS/JS yang dirujuk HTML diberi
+   versi isinya (`style.css?v=3923b935ee`, per berkas), aset bertanda versi
+   `immutable`, HTML `no-cache`. Tidak bergantung pada pengaturan CDN mana pun.
+5. **Catatan "scrub dua kali" tidak padam setelah diperbaiki.** Pemilik mematikan
+   scrub cron Debian dengan cara yang dianjurkan Debian —
+   `zfs set org.debian:periodic-scrub=disable` di tiap pool — tapi catatannya
+   hanya melihat baris cron *ada*. Sekarang properti itu dibaca, dan baris cron
+   yang akan melewati semua pool ditandai *tidak aktif*. Catatan yang tidak bisa
+   dipadamkan dengan memperbaiki masalahnya akan diabaikan orang.
+
 Dan satu yang justru bekerja seperti dirancang: di mesin nyata `zfs_arc_max`
 sudah diatur di `/etc/modprobe.d/zfs.conf`, dan helper menolak "simpan
 permanen" sambil menyebut berkas itu. Halaman kelola sekarang mematikan pilihan

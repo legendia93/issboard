@@ -43,6 +43,11 @@ type CronEntry struct {
 	Schedule string `json:"schedule"`
 	User     string `json:"user,omitempty"`
 	Command  string `json:"command"`
+	// Inactive: barisnya ada, tapi tidak akan melakukan apa-apa — mis. skrip
+	// scrub Debian saat semua pool bertanda org.debian:periodic-scrub=disable.
+	// Baris seperti itu tetap ditampilkan (ia memang ada di /etc/cron.d),
+	// tapi tidak boleh dihitung sebagai jadwal yang berjalan.
+	Inactive string `json:"inactive,omitempty"`
 }
 
 type Smartd struct {
@@ -91,6 +96,11 @@ func ReadSchedule(ctx context.Context) Schedule {
 				s.Cron = append(s.Cron, c)
 			}
 		}
+	}
+
+	if out, err := exec.CommandContext(ctx, "zfs", "list", "-H", "-d", "0",
+		"-o", "name,"+debianScrubProp).Output(); err == nil {
+		markDebianScrub(s.Cron, parsePoolProps(string(out)))
 	}
 
 	for _, f := range []string{"/etc/smartd.conf", "/etc/smartmontools/smartd.conf"} {
@@ -183,6 +193,42 @@ func parseSmartd(s, file string) *Smartd {
 	return sd
 }
 
+// debianScrubProp adalah saklar per-pool milik skrip scrub cron Debian
+// (/usr/lib/zfs-linux/scrub). "disable" membuat skrip itu melewati pool-nya;
+// "-", "auto", atau "enable" berarti di-scrub. Dibaca lewat `zfs get` pada
+// dataset akar — BUKAN properti zpool, yang namespace-nya terpisah.
+const debianScrubProp = "org.debian:periodic-scrub"
+
+func parsePoolProps(out string) map[string]string {
+	m := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if f := strings.Split(line, "\t"); len(f) == 2 {
+			m[f[0]] = f[1]
+		}
+	}
+	return m
+}
+
+// markDebianScrub menandai baris cron skrip scrub Debian sebagai tidak aktif
+// kalau SEMUA pool sudah mematikannya. Tanpa ini, catatan "scrub dijadwalkan
+// dua kali" tetap menyala setelah orangnya justru memperbaikinya dengan cara
+// yang dianjurkan Debian — catatan yang tidak bisa dipadamkan akan diabaikan.
+func markDebianScrub(cron []CronEntry, pools map[string]string) {
+	if len(pools) == 0 {
+		return
+	}
+	for _, v := range pools {
+		if v != "disable" {
+			return
+		}
+	}
+	for i := range cron {
+		if strings.Contains(cron[i].Command, "zfs-linux/scrub") {
+			cron[i].Inactive = "semua pool bertanda " + debianScrubProp + "=disable"
+		}
+	}
+}
+
 // zfsScrub sengaja lebih sempit dari `relevant`: e2scrub_all milik ext4 juga
 // mengandung "scrub", dan menghitungnya sebagai scrub ZFS akan membuat catatan
 // "scrub terjadwal ada" benar di mesin yang pool-nya tidak pernah di-scrub.
@@ -194,7 +240,7 @@ func scheduleNotes(s Schedule, hasZFS bool) []string {
 	var notes []string
 	cronScrub, timerScrub := false, false
 	for _, c := range s.Cron {
-		if zfsScrub.MatchString(c.Command) {
+		if c.Inactive == "" && zfsScrub.MatchString(c.Command) {
 			cronScrub = true
 		}
 	}
